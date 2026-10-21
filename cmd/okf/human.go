@@ -214,8 +214,17 @@ func printHits(hits []search.Hit, terms []string) {
 
 func printConcept(c *concept.Concept) {
 	fm := c.Frontmatter
-	fmt.Println(bold(fm.Title))
-	meta := []string{displayPath(c.Path), "type: " + fm.Type, "status: " + fm.EffectiveStatus()}
+	title := fm.Title
+	if title == "" {
+		title = strings.TrimSuffix(filepath.Base(c.Path), filepath.Ext(c.Path))
+	}
+	fmt.Println(bold(title))
+	meta := []string{displayPath(c.Path)}
+	if fm.Type != "" {
+		meta = append(meta, "type: "+fm.Type, "status: "+fm.EffectiveStatus())
+	} else {
+		meta = append(meta, "no frontmatter")
+	}
 	if len(fm.Tags) > 0 {
 		meta = append(meta, "tags: "+strings.Join(fm.Tags, ", "))
 	}

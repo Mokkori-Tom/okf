@@ -9,6 +9,7 @@ A Go CLI toolkit for the [Open Knowledge Format (OKF)](https://github.com/Google
 > - **Plain-text output on a terminal.** When stdout is a terminal, `list`, `search`, `show`, `backlinks`, `validate`, `lint` and `new` print readable text; piped or agent-driven runs still get the same JSON. Force a mode with `--json` / `--human` or `OKF_OUTPUT=json|human`. `NO_COLOR` disables colors.
 > - **`okf new [bundle] <concept-id>`** writes a page with OKF frontmatter (`type`, `title`, empty `description`/`tags`, `generated.by/at`) and opens it in `$VISUAL`/`$EDITOR`. It never overwrites an existing page. Flags: `--title`, `--type` (default `Note`), `--tag a,b`, `--description`, `--no-edit`. The author is `$OKF_AUTHOR`, else `human:$USER`.
 > - **Search that works for Japanese.** `okf search [bundle] 電力 上限` takes terms directly (AND), matches substrings, and ignores case, full-width/half-width ASCII and katakana/hiragana (`ふぁん` finds `ファン`). Results are ranked (title matches first) and include matching lines with file line numbers (`matches`, `match_count` in JSON). `--text`, `--tag` and `--type` still work.
+> - **`okf show` takes a file path.** `okf show notes/gpu.md` reads that file directly, without loading the rest of the bundle, so it works from anywhere and even on plain markdown without frontmatter.
 > - **Default bundle.** The bundle argument may be left out; `$OKF_BUNDLE` is used, else the current directory.
 >
 > Build from source (the module path is unchanged, so `go install` from the fork path does not work):
@@ -146,7 +147,7 @@ Progressive disclosure (index.md) lets the agent navigate level by level instead
 | `okf lint <bundle> [--format json\|sarif]` | Check recommended fields and style (warnings only) |
 | `okf index <bundle>` | Generate index.md files (progressive disclosure) |
 | `okf list <bundle>` | List all concepts with ID, type, title, status, trust tier |
-| `okf show <bundle> <concept-id>` | Show a single concept's full content as JSON |
+| `okf show [bundle] <concept-id \| file.md>` | Show a single concept's full content |
 | `okf search [bundle] [terms...] [--tag] [--type] [--text]` | Search concepts by tag, type, or text |
 | `okf new [bundle] <concept-id> [--title] [--type] [--tag] [--no-edit]` | Create a concept page and open it in $EDITOR |
 | `okf backlinks <bundle> <concept-id>` | List concepts that link to a given concept |

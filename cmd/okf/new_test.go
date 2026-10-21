@@ -137,3 +137,39 @@ func TestE2E_HumanOutput(t *testing.T) {
 		t.Errorf("--json: %q", out)
 	}
 }
+
+func TestE2E_ShowByFilePath(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "notes", "gpu.md"), "---\ntype: Note\ntitle: GPUのファン\n---\n\nファンカーブを適用\n")
+	// A plain markdown file would make the bundle fail to load (OKF §11);
+	// reading one file by path must not depend on the rest of the bundle.
+	writeFile(t, filepath.Join(dir, "plain.md"), "# ただのメモ\n\n本文\n")
+	other := t.TempDir()
+
+	var res struct {
+		Concept struct {
+			ID    string `json:"id"`
+			Title string `json:"title"`
+			Body  string `json:"body"`
+		} `json:"concept"`
+	}
+	out, code := runOKFIn(t, other, nil, "show", filepath.Join(dir, "notes", "gpu.md"))
+	if code != 0 || json.Unmarshal([]byte(out), &res) != nil || res.Concept.Title != "GPUのファン" {
+		t.Fatalf("show outside bundle: exit %d; out=%s", code, out)
+	}
+	if res.Concept.ID != "gpu" {
+		t.Errorf("id outside bundle = %q, want gpu", res.Concept.ID)
+	}
+	out, code = runOKFIn(t, dir, nil, "show", "notes/gpu.md")
+	if code != 0 || json.Unmarshal([]byte(out), &res) != nil || res.Concept.ID != "notes/gpu" {
+		t.Errorf("show inside bundle: exit %d; out=%s", code, out)
+	}
+	out, code = runOKFIn(t, dir, nil, "show", "--human", "plain.md")
+	if code != 0 || !strings.HasPrefix(out, "plain\nplain.md  no frontmatter\n\n# ただのメモ\n") {
+		t.Errorf("show plain markdown: exit %d; out=%q", code, out)
+	}
+	// IDs still go through the bundle, which fails to load here.
+	if _, code := runOKFIn(t, dir, nil, "show", "notes/gpu"); code != cerr.ExitCodeValidation {
+		t.Errorf("show by id with a broken bundle: exit %d, want %d", code, cerr.ExitCodeValidation)
+	}
+}

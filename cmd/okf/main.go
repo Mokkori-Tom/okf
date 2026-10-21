@@ -13,12 +13,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/okfcli/okf/internal/backlinks"
 	"github.com/okfcli/okf/internal/bundle"
 	"github.com/okfcli/okf/internal/cerr"
+	"github.com/okfcli/okf/internal/concept"
 	"github.com/okfcli/okf/internal/graph"
 	"github.com/okfcli/okf/internal/index"
 	"github.com/okfcli/okf/internal/initbundle"
@@ -394,12 +396,25 @@ func runShow(args []string) {
 		args = []string{defaultBundle(), args[0]}
 	}
 	if len(args) < 2 {
-		exitErr(cerr.Usage("usage: okf show [bundle] <concept-id>"))
+		exitErr(cerr.Usage("usage: okf show [bundle] <concept-id | file.md>"))
 	}
-	b := mustBundle("show", args[:1])
-	c, err := show.Show(b, strings.TrimSuffix(args[1], ".md"))
-	if err != nil {
-		exitErr(cerr.Validation("%s", err))
+	var c *concept.Concept
+	root := args[0]
+	if isMarkdownFile(args[1]) {
+		// A path to an existing file is read directly, without loading the
+		// rest of the bundle.
+		var err error
+		if c, err = show.File(args[1], root); err != nil {
+			exitErr(cerr.Validation("%s", err))
+		}
+		root, _ = filepath.Abs(root)
+	} else {
+		b := mustBundle("show", args[:1])
+		var err error
+		if c, err = show.Show(b, strings.TrimSuffix(args[1], ".md")); err != nil {
+			exitErr(cerr.Validation("%s", err))
+		}
+		root = b.Root
 	}
 	if humanOut {
 		printConcept(c)
@@ -492,7 +507,7 @@ func runShow(args []string) {
 
 	outputJSON(map[string]any{
 		"command": "show",
-		"bundle":  b.Root,
+		"bundle":  root,
 		"concept": out,
 	})
 }
@@ -585,6 +600,12 @@ func defaultBundle() string {
 		return b
 	}
 	return "."
+}
+
+// isMarkdownFile reports whether p names an existing regular .md file.
+func isMarkdownFile(p string) bool {
+	info, err := os.Stat(p)
+	return err == nil && info.Mode().IsRegular() && strings.HasSuffix(strings.ToLower(p), ".md")
 }
 
 func isDir(p string) bool {
@@ -779,7 +800,7 @@ func allSchemaCommands() []schemaCommand {
 		{
 			Name:  "show",
 			Short: "Show a single concept's full content",
-			Long:  "Returns the concept's ID, file path, frontmatter (type, title, description, resource, tags), trust and lifecycle state (status, trust_tier, stale, generated, verified, stale_after), provenance (sources, usage_window), the Attested Computation contract when present (runtime, parameters, computation, executor, attester), and markdown body as JSON.",
+			Long:  "Accepts a concept ID or a path to an existing .md file; a file path is read directly without loading the rest of the bundle, and a file without frontmatter is shown with empty frontmatter. Returns the concept's ID, file path, frontmatter (type, title, description, resource, tags), trust and lifecycle state (status, trust_tier, stale, generated, verified, stale_after), provenance (sources, usage_window), the Attested Computation contract when present (runtime, parameters, computation, executor, attester), and markdown body as JSON.",
 			Args: []schemaArg{
 				{Name: "bundle", Required: true},
 				{Name: "concept-id", Required: true},
