@@ -7,6 +7,8 @@ package validate
 const (
 	// frontmatter: required and recommended fields (§4.1)
 	RuleTypeRequired           = "okf/frontmatter/type-required"
+	RuleFrontmatterMissing     = "okf/frontmatter/missing"
+	RuleFrontmatterInvalid     = "okf/frontmatter/invalid"
 	RuleTitleRecommended       = "okf/frontmatter/title-recommended"
 	RuleDescriptionRecommended = "okf/frontmatter/description-recommended"
 	RuleTagsRecommended        = "okf/frontmatter/tags-recommended"
@@ -60,7 +62,9 @@ const (
 // ruleDescriptions gives each rule a short one-line description, used as the
 // SARIF shortDescription. Every rule ID must have an entry.
 var ruleDescriptions = map[string]string{
-	RuleTypeRequired:           "frontmatter 'type' is required (OKF §4.1)",
+	RuleTypeRequired:           "frontmatter has no 'type'; read as a plain note, not yet an OKF concept (OKF §4.1)",
+	RuleFrontmatterMissing:     "no YAML frontmatter; the file is read as plain markdown (OKF §4.1, §11)",
+	RuleFrontmatterInvalid:     "frontmatter block is unclosed or not valid YAML",
 	RuleTitleRecommended:       "frontmatter 'title' is recommended (OKF §4.1)",
 	RuleDescriptionRecommended: "frontmatter 'description' is recommended (OKF §4.1)",
 	RuleTagsRecommended:        "frontmatter 'tags' is recommended (OKF §4.1)",

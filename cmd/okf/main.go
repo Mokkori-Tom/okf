@@ -372,7 +372,7 @@ func runList(args []string) {
 		concepts = append(concepts, map[string]string{
 			"id":         c.ID,
 			"type":       c.Frontmatter.Type,
-			"title":      c.Frontmatter.Title,
+			"title":      c.DisplayTitle(),
 			"status":     c.Frontmatter.EffectiveStatus(),
 			"trust_tier": c.Frontmatter.TrustTier(),
 		})
@@ -431,7 +431,7 @@ func runShow(args []string) {
 		"id":          c.ID,
 		"path":        c.Path,
 		"type":        fm.Type,
-		"title":       fm.Title,
+		"title":       c.DisplayTitle(),
 		"description": fm.Description,
 		"resource":    fm.Resource,
 		"tags":        tags,
@@ -569,7 +569,7 @@ func runSearch(args []string) {
 		r := map[string]any{
 			"id":    h.Concept.ID,
 			"type":  h.Concept.Frontmatter.Type,
-			"title": h.Concept.Frontmatter.Title,
+			"title": h.Concept.DisplayTitle(),
 		}
 		if h.Lines != nil {
 			lines := h.Lines

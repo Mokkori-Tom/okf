@@ -142,17 +142,13 @@ type conceptInfo struct {
 }
 
 func parseConceptInfo(path string) (conceptInfo, error) {
-	c, err := concept.Parse(path, filepath.Base(path))
+	c, err := concept.ParseLenient(path, filepath.Base(path))
 	if err != nil {
 		return conceptInfo{filename: filepath.Base(path), title: filepath.Base(path)}, nil
 	}
-	title := c.Frontmatter.Title
-	if title == "" {
-		title = strings.TrimSuffix(filepath.Base(path), ".md")
-	}
 	return conceptInfo{
 		filename:    filepath.Base(path),
-		title:       title,
+		title:       c.DisplayTitle(),
 		typeName:    c.Frontmatter.Type,
 		description: c.Frontmatter.Description,
 	}, nil

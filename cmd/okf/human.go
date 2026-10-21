@@ -6,6 +6,7 @@ package main
 // OKF_OUTPUT=json forces JSON on a terminal too.
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -187,7 +188,11 @@ func printConcepts(concepts []*concept.Concept) {
 	}
 	w := idColumn(ids)
 	for _, c := range concepts {
-		fmt.Printf("%s  %s %s\n", bold(pad(c.ID, w)), c.Frontmatter.Title, dim("["+c.Frontmatter.Type+"]"))
+		typ := c.Frontmatter.Type
+		if c.FrontmatterErr != nil {
+			typ = "no frontmatter"
+		}
+		fmt.Printf("%s  %s %s\n", bold(pad(c.ID, w)), c.DisplayTitle(), dim("["+typ+"]"))
 	}
 	fmt.Fprintln(os.Stderr, dim(fmt.Sprintf("%d found", len(concepts))))
 }
@@ -200,7 +205,7 @@ func printHits(hits []search.Hit, terms []string) {
 			fmt.Println()
 		}
 		c := h.Concept
-		fmt.Printf("%s  %s\n", bold(c.ID), highlight(c.Frontmatter.Title, terms, 0))
+		fmt.Printf("%s  %s\n", bold(c.ID), highlight(c.DisplayTitle(), terms, 0))
 		for k, l := range h.Lines {
 			if k == maxHumanLines {
 				fmt.Println(dim(fmt.Sprintf("  … +%d lines", len(h.Lines)-k)))
@@ -214,16 +219,14 @@ func printHits(hits []search.Hit, terms []string) {
 
 func printConcept(c *concept.Concept) {
 	fm := c.Frontmatter
-	title := fm.Title
-	if title == "" {
-		title = strings.TrimSuffix(filepath.Base(c.Path), filepath.Ext(c.Path))
-	}
-	fmt.Println(bold(title))
+	fmt.Println(bold(c.DisplayTitle()))
 	meta := []string{displayPath(c.Path)}
-	if fm.Type != "" {
-		meta = append(meta, "type: "+fm.Type, "status: "+fm.EffectiveStatus())
-	} else {
+	if errors.Is(c.FrontmatterErr, concept.ErrNoFrontmatter) {
 		meta = append(meta, "no frontmatter")
+	} else if c.FrontmatterErr != nil {
+		meta = append(meta, style("31", "invalid frontmatter"))
+	} else {
+		meta = append(meta, "type: "+fm.Type, "status: "+fm.EffectiveStatus())
 	}
 	if len(fm.Tags) > 0 {
 		meta = append(meta, "tags: "+strings.Join(fm.Tags, ", "))

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/okfcli/okf/internal/cerr"
+	"github.com/okfcli/okf/internal/concept"
 )
 
 // --- issue #31: commands without flags must still reject flags as usage ---
@@ -42,25 +43,27 @@ func TestRejectFlags(t *testing.T) {
 
 // --- issue #27: a non-concept .md is a validation error naming the file ---
 
-func TestLoadBundle_MissingFrontmatterIsValidationError(t *testing.T) {
+func TestLoadBundle_PlainMarkdownLoads(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "index.md"), "# Demo\n")
 	writeFile(t, filepath.Join(dir, "README.md"), "# Demo project\n")
 
+	b, err := loadBundle(dir)
+	if err != nil {
+		t.Fatalf("plain markdown should load leniently: %v", err)
+	}
+	c := b.Get("README")
+	if c == nil || !errors.Is(c.FrontmatterErr, concept.ErrNoFrontmatter) || c.DisplayTitle() != "Demo project" {
+		t.Errorf("README concept = %+v", c)
+	}
+}
+
+func TestLoadBundle_BrokenReservedFrontmatterIsValidationError(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "index.md"), "---\nokf_version: [\n---\n# Demo\n")
 	_, err := loadBundle(dir)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if err.Kind != cerr.KindValidation {
-		t.Errorf("kind = %v, want validation", err.Kind)
-	}
-	for _, want := range []string{"README.md", "no YAML frontmatter"} {
-		if !strings.Contains(err.Message, want) {
-			t.Errorf("message %q does not mention %q", err.Message, want)
-		}
-	}
-	if err.Hint == "" {
-		t.Error("expected a hint explaining the frontmatter requirement")
+	if err == nil || err.Kind != cerr.KindValidation || !strings.Contains(err.Message, "index.md") {
+		t.Fatalf("got %v, want a validation error naming index.md", err)
 	}
 }
 
@@ -158,27 +161,41 @@ func TestE2E_UnknownFlagIsUsageError(t *testing.T) {
 	}
 }
 
-func TestE2E_MarkdownWithoutFrontmatterNamesFile(t *testing.T) {
+func TestE2E_PlainMarkdownIsAWarning(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "index.md"), "# Demo\n")
-	writeFile(t, filepath.Join(dir, "README.md"), "# Demo project\n")
+	writeFile(t, filepath.Join(dir, "README.md"), "# Demo project\n\n電力の記録\n")
 
 	out, code := runOKF(t, "list", dir)
-	if code != cerr.ExitCodeValidation {
-		t.Errorf("exit %d, want %d; out=%s", code, cerr.ExitCodeValidation, out)
+	if code != 0 || !strings.Contains(out, `"title": "Demo project"`) {
+		t.Errorf("list: exit %d; out=%s", code, out)
 	}
-	var env envelope
-	if err := json.Unmarshal([]byte(out), &env); err != nil {
-		t.Fatalf("bad json %q", out)
+	if out, code := runOKF(t, "search", dir, "電力"); code != 0 || !strings.Contains(out, `"count": 1`) {
+		t.Errorf("search: exit %d; out=%s", code, out)
 	}
-	if env.Error.Kind != "validation" {
-		t.Errorf("kind = %q, want validation", env.Error.Kind)
+
+	out, code = runOKF(t, "validate", dir)
+	if code != 0 {
+		t.Errorf("validate: exit %d, want 0 (missing frontmatter is a warning); out=%s", code, out)
 	}
-	if !strings.Contains(env.Error.Message, "README.md") || !strings.Contains(env.Error.Message, "frontmatter") {
-		t.Errorf("message %q does not name the file and reason", env.Error.Message)
+	if !strings.Contains(out, `"rule": "okf/frontmatter/missing"`) || !strings.Contains(out, `"concept_id": "README"`) {
+		t.Errorf("validate does not report README: %s", out)
 	}
-	if env.Error.Hint == "" {
-		t.Error("expected a hint")
+	// One warning, not a field-by-field list.
+	if strings.Contains(out, "type-required") || strings.Contains(out, "title-recommended") {
+		t.Errorf("field checks ran on a plain note: %s", out)
+	}
+}
+
+func TestE2E_BrokenFrontmatterIsAnError(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.md"), "---\ntype: T\n\nbody without closing delimiter\n")
+	if out, code := runOKF(t, "search", dir, "closing"); code != 0 || !strings.Contains(out, `"count": 1`) {
+		t.Errorf("search: exit %d; out=%s", code, out)
+	}
+	out, code := runOKF(t, "validate", dir)
+	if code != cerr.ExitCodeValidation || !strings.Contains(out, `"rule": "okf/frontmatter/invalid"`) {
+		t.Errorf("validate: exit %d; out=%s", code, out)
 	}
 }
 
@@ -202,19 +219,16 @@ func TestE2E_BrokenLinkDoesNotFailValidate(t *testing.T) {
 	}
 }
 
-func TestE2E_IndexRefusesNonConceptMarkdown(t *testing.T) {
+func TestE2E_IndexListsPlainMarkdown(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "a.md"), "---\ntype: T\ntitle: A\n---\n\nbody")
 	writeFile(t, filepath.Join(dir, "README.md"), "# Demo project\n")
 
-	out, code := runOKF(t, "index", dir)
-	if code != cerr.ExitCodeValidation {
-		t.Errorf("exit %d, want %d; out=%s", code, cerr.ExitCodeValidation, out)
+	if out, code := runOKF(t, "index", dir); code != 0 {
+		t.Fatalf("index: exit %d; out=%s", code, out)
 	}
-	if !strings.Contains(out, "README.md") {
-		t.Errorf("output %q does not name the file", out)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "index.md")); err == nil {
-		t.Error("index.md was written even though the bundle failed to load")
+	raw, err := os.ReadFile(filepath.Join(dir, "index.md"))
+	if err != nil || !strings.Contains(string(raw), "Demo project") {
+		t.Errorf("index.md does not list README by its heading: %q %v", raw, err)
 	}
 }

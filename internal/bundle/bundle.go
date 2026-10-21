@@ -48,6 +48,9 @@ func wrapParse(relPath string, err error) error {
 
 // Load walks a bundle directory and parses every .md file.
 // Reserved filenames (index.md, log.md) are separated into Reserved.
+// Concepts with missing or malformed frontmatter are loaded with
+// FrontmatterErr set (see concept.ParseLenient); malformed frontmatter in a
+// reserved file is still a ParseError.
 func Load(root string) (*Bundle, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
@@ -104,7 +107,10 @@ func Load(root string) (*Bundle, error) {
 			return nil
 		}
 
-		c, err := concept.Parse(path, relPath)
+		// Concepts load leniently: a note without (or with broken)
+		// frontmatter is kept and reported by validate instead of taking
+		// the whole bundle down. Only filesystem failures stop the load.
+		c, err := concept.ParseLenient(path, relPath)
 		if err != nil {
 			return wrapParse(relPath, err)
 		}

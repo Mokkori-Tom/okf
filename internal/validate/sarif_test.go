@@ -18,6 +18,8 @@ var allRuleIDs = []string{
 	"okf/computation/path-missing",
 	"okf/computation/runtime-required",
 	"okf/frontmatter/description-recommended",
+	"okf/frontmatter/invalid",
+	"okf/frontmatter/missing",
 	"okf/frontmatter/tags-recommended",
 	"okf/frontmatter/timestamp-future",
 	"okf/frontmatter/title-recommended",

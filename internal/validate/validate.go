@@ -2,6 +2,7 @@
 package validate
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -52,6 +53,9 @@ func (r *Report) HasErrors() bool { return r.Errors > 0 }
 func Validate(b *bundle.Bundle) *Report {
 	r := &Report{}
 	for _, c := range b.Concepts {
+		if plainNote(r, c) {
+			continue
+		}
 		validateFrontmatter(r, c)
 		validateBody(r, c)
 		validateV02(r, b, c)
@@ -61,14 +65,33 @@ func Validate(b *bundle.Bundle) *Report {
 	return r
 }
 
+// plainNote reports whether c is not (yet) an OKF concept and, if so, records
+// the single finding for it so the per-field checks are skipped. A note
+// without frontmatter, or whose frontmatter has no 'type' (typical of an
+// Obsidian vault: tags, date, free-form status), gets one warning; such notes
+// load and search like any concept, so moving a vault to OKF can be gradual.
+// Frontmatter that is present but unparseable is an error, since the file was
+// meant to carry metadata.
+func plainNote(r *Report, c *concept.Concept) bool {
+	switch err := c.FrontmatterErr; {
+	case errors.Is(err, concept.ErrNoFrontmatter):
+		r.add(c.ID, RuleFrontmatterMissing, SeverityWarning, "no YAML frontmatter: read as a plain note; add at least 'type' and 'title' to make it an OKF concept (OKF §4.1, §11)")
+	case err != nil:
+		r.add(c.ID, RuleFrontmatterInvalid, SeverityError, "frontmatter: "+err.Error())
+	case strings.TrimSpace(c.Frontmatter.Type) == "":
+		r.add(c.ID, RuleTypeRequired, SeverityWarning, "frontmatter: no 'type', read as a plain note; add 'type' to make it an OKF concept, which turns on the full checks (OKF §4.1)")
+	default:
+		return false
+	}
+	return true
+}
+
 // validateFrontmatter checks required and recommended frontmatter fields.
 func validateFrontmatter(r *Report, c *concept.Concept) {
 	fm := c.Frontmatter
 
-	// type is REQUIRED (OKF spec §4.1)
-	if strings.TrimSpace(fm.Type) == "" {
-		r.add(c.ID, RuleTypeRequired, SeverityError, "frontmatter: 'type' is required (OKF §4.1)")
-	}
+	// type is REQUIRED (OKF spec §4.1); a concept without one is handled by
+	// plainNote before this runs.
 
 	// Recommended fields (OKF spec §4.1)
 	if fm.Title == "" {

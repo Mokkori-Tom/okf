@@ -63,7 +63,7 @@ func Find(b *bundle.Bundle, f Filters) []Hit {
 		h := Hit{Concept: c}
 		if len(terms) > 0 {
 			h.Lines = matchLines(c.Path, terms)
-			h.inTitle = containsAll(Fold(c.Frontmatter.Title), terms)
+			h.inTitle = containsAll(Fold(c.DisplayTitle()), terms)
 		}
 		hits = append(hits, h)
 	}
@@ -120,7 +120,7 @@ func matchTerms(c *concept.Concept, terms []string) bool {
 		return true
 	}
 	fm := c.Frontmatter
-	return containsAll(Fold(fm.Title+"\n"+fm.Description+"\n"+c.Body), terms)
+	return containsAll(Fold(c.DisplayTitle()+"\n"+fm.Description+"\n"+c.Body), terms)
 }
 
 func containsAll(folded string, terms []string) bool {

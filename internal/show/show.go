@@ -22,9 +22,9 @@ func Show(b *bundle.Bundle, conceptID string) (*concept.Concept, error) {
 
 // File parses the concept document at path directly, without loading the
 // bundle. Its ID is the path relative to root when the file lies inside root,
-// else the file name without .md. A file without frontmatter is returned with
-// empty frontmatter and the whole file as body, so plain markdown can still be
-// read.
+// else the file name without .md. A file without (or with broken)
+// frontmatter is returned with FrontmatterErr set, so plain markdown can
+// still be read.
 func File(path, root string) (*concept.Concept, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
@@ -36,7 +36,7 @@ func File(path, root string) (*concept.Concept, error) {
 			rel = r
 		}
 	}
-	c, err := concept.ParseReserved(abs, rel)
+	c, err := concept.ParseLenient(abs, rel)
 	if err != nil {
 		return nil, err
 	}

@@ -205,7 +205,9 @@ func TestLoad_GeneratedIndexIsDiscoverable(t *testing.T) {
 
 // Issue #27: a .md file that is not a concept must fail with an error that
 // names the file and the reason, distinguishable from a filesystem failure.
-func TestLoad_MissingFrontmatterNamesFile(t *testing.T) {
+// A .md file without frontmatter is loaded leniently as a plain note; validate
+// reports it. This replaces upstream's hard failure (issue #27).
+func TestLoad_MissingFrontmatterLoadsLeniently(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "index.md"), []byte("# Demo\n"), 0644); err != nil {
 		t.Fatal(err)
@@ -217,36 +219,37 @@ func TestLoad_MissingFrontmatterNamesFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := Load(dir)
-	if err == nil {
-		t.Fatal("expected an error for markdown without frontmatter")
+	b, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
 	}
-	var pe *ParseError
-	if !errors.As(err, &pe) {
-		t.Fatalf("error %T %q is not a *ParseError", err, err)
+	c := b.Get("docs/README")
+	if c == nil {
+		t.Fatal("docs/README not loaded")
 	}
-	if pe.Path != "docs/README.md" {
-		t.Errorf("ParseError.Path = %q, want docs/README.md", pe.Path)
+	if !errors.Is(c.FrontmatterErr, concept.ErrNoFrontmatter) {
+		t.Errorf("FrontmatterErr = %v, want ErrNoFrontmatter", c.FrontmatterErr)
 	}
-	if !errors.Is(err, concept.ErrNoFrontmatter) {
-		t.Errorf("error does not unwrap to ErrNoFrontmatter: %v", err)
-	}
-	for _, want := range []string{"docs/README.md", "no YAML frontmatter"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("error %q does not mention %q", err, want)
-		}
+	if c.Body != "# Demo project\n" || c.DisplayTitle() != "Demo project" {
+		t.Errorf("body %q, title %q", c.Body, c.DisplayTitle())
 	}
 }
 
-func TestLoad_UnclosedFrontmatterIsParseError(t *testing.T) {
+func TestLoad_UnclosedFrontmatterLoadsWithError(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "a.md"), []byte("---\ntype: T\n\nbody"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Load(dir)
-	var pe *ParseError
-	if !errors.As(err, &pe) || pe.Path != "a.md" {
-		t.Fatalf("want *ParseError for a.md, got %T %v", err, err)
+	b, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	c := b.Get("a")
+	if c == nil || c.FrontmatterErr == nil || errors.Is(c.FrontmatterErr, concept.ErrNoFrontmatter) {
+		t.Fatalf("want a concept with a non-missing FrontmatterErr, got %+v", c)
+	}
+	if !strings.Contains(c.Body, "body") {
+		t.Errorf("body %q lost the text", c.Body)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -132,6 +133,26 @@ type Concept struct {
 	Frontmatter Frontmatter
 	Body        string
 	RawFront    string // raw YAML block for round-tripping
+
+	// FrontmatterErr is set when the file was loaded leniently despite a
+	// missing (ErrNoFrontmatter) or unparseable frontmatter block. Frontmatter
+	// is then empty and Body holds the readable markdown. Validation reports
+	// it; every other command treats the file as an ordinary concept.
+	FrontmatterErr error
+}
+
+// DisplayTitle is the title to show for the concept: the frontmatter title,
+// else the first "# " heading of the body, else the file name.
+func (c *Concept) DisplayTitle() string {
+	if c.Frontmatter.Title != "" {
+		return c.Frontmatter.Title
+	}
+	for _, line := range strings.Split(c.Body, "\n") {
+		if h, ok := strings.CutPrefix(strings.TrimRight(line, "\r"), "# "); ok && strings.TrimSpace(h) != "" {
+			return strings.TrimSpace(h)
+		}
+	}
+	return path.Base(c.ID)
 }
 
 // Reserved filenames per OKF spec §3.1 - they are NOT concepts.
@@ -172,6 +193,32 @@ func ParseBytes(raw []byte, relPath, absPath string) (*Concept, error) {
 		Frontmatter: fm,
 		Body:        body,
 		RawFront:    front,
+	}, nil
+}
+
+// ParseLenient reads a concept like Parse, but a missing or malformed
+// frontmatter block is not an error: the concept comes back with empty
+// Frontmatter, FrontmatterErr set, and the markdown after the block (or the
+// whole file) as Body. Only a filesystem failure is returned as an error.
+// This lets plain markdown notes, such as an Obsidian vault, live in a bundle.
+func ParseLenient(path, relPath string) (*Concept, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	c, err := ParseBytes(raw, relPath, path)
+	if err == nil {
+		return c, nil
+	}
+	_, body, serr := splitFrontmatter(raw)
+	if serr != nil {
+		body = strings.TrimPrefix(string(raw), "\uFEFF")
+	}
+	return &Concept{
+		ID:             conceptID(relPath),
+		Path:           path,
+		Body:           body,
+		FrontmatterErr: err,
 	}, nil
 }
 

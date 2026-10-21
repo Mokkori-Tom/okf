@@ -141,8 +141,7 @@ func TestE2E_HumanOutput(t *testing.T) {
 func TestE2E_ShowByFilePath(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "notes", "gpu.md"), "---\ntype: Note\ntitle: GPUのファン\n---\n\nファンカーブを適用\n")
-	// A plain markdown file would make the bundle fail to load (OKF §11);
-	// reading one file by path must not depend on the rest of the bundle.
+	// Reading one file by path does not load the rest of the bundle.
 	writeFile(t, filepath.Join(dir, "plain.md"), "# ただのメモ\n\n本文\n")
 	other := t.TempDir()
 
@@ -165,11 +164,11 @@ func TestE2E_ShowByFilePath(t *testing.T) {
 		t.Errorf("show inside bundle: exit %d; out=%s", code, out)
 	}
 	out, code = runOKFIn(t, dir, nil, "show", "--human", "plain.md")
-	if code != 0 || !strings.HasPrefix(out, "plain\nplain.md  no frontmatter\n\n# ただのメモ\n") {
+	if code != 0 || !strings.HasPrefix(out, "ただのメモ\nplain.md  no frontmatter\n\n# ただのメモ\n") {
 		t.Errorf("show plain markdown: exit %d; out=%q", code, out)
 	}
-	// IDs still go through the bundle, which fails to load here.
-	if _, code := runOKFIn(t, dir, nil, "show", "notes/gpu"); code != cerr.ExitCodeValidation {
-		t.Errorf("show by id with a broken bundle: exit %d, want %d", code, cerr.ExitCodeValidation)
+	// The plain file does not stop the bundle from loading for IDs either.
+	if _, code := runOKFIn(t, dir, nil, "show", "notes/gpu"); code != 0 {
+		t.Errorf("show by id next to plain markdown: exit %d, want 0", code)
 	}
 }
