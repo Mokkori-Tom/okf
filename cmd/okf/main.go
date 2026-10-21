@@ -34,7 +34,7 @@ var (
 )
 
 func main() {
-	args := os.Args[1:]
+	args := setOutputMode(os.Args[1:])
 	if len(args) == 0 {
 		printUsage()
 		os.Exit(0)
@@ -66,6 +66,8 @@ func main() {
 		runSearch(rest)
 	case "init":
 		runInit(rest)
+	case "new":
+		runNew(rest)
 	case "backlinks":
 		runBacklinks(rest)
 	default:
@@ -76,9 +78,12 @@ func main() {
 const usage = `okf - Open Knowledge Format toolkit (v%s)
 
 Usage:
-  okf <command> <bundle-path>
+  okf <command> [bundle-path]
 
-All output is JSON on stdout. Diagnostics go to stderr.
+Output is JSON on stdout when piped (what agents and scripts get) and plain
+text on a terminal. --json / --human or OKF_OUTPUT=json|human force a mode.
+Diagnostics go to stderr. The bundle path defaults to $OKF_BUNDLE, else the
+current directory.
 
 Commands:
   schema [command]            Print machine-readable CLI metadata as JSON
@@ -88,7 +93,8 @@ Commands:
   index <bundle>              Generate index.md files (progressive disclosure)
   list <bundle>               List all concepts in the bundle
   show <bundle> <concept-id> Show a single concept's full content
-  search <bundle> [filters]  Search concepts by tag, type, or text
+  search <bundle> [terms...]  Search concepts by text terms, --tag, --type
+  new <bundle> <concept-id>   Create a concept page and open it in $EDITOR
   backlinks <bundle> <id>    List concepts that link to a given concept
   graph <bundle>             Print cross-link graph statistics
   version                     Print version
@@ -125,9 +131,14 @@ func exitErr(err error) {
 	if e == nil {
 		os.Exit(0)
 	}
-	b, _ := e.ToJSON()
-	fmt.Println(string(b))
+	if !humanOut {
+		b, _ := e.ToJSON()
+		fmt.Println(string(b))
+	}
 	fmt.Fprintf(os.Stderr, "error[%s]: %s\n", e.Kind, e.Message)
+	if humanOut && e.Hint != "" {
+		fmt.Fprintf(os.Stderr, "hint: %s\n", e.Hint)
+	}
 	os.Exit(e.ExitCode())
 }
 
@@ -167,7 +178,7 @@ func mustBundle(cmd string, args []string) *bundle.Bundle {
 		exitErr(err)
 	}
 	if len(args) == 0 {
-		exitErr(cerr.Usage("bundle path required"))
+		args = []string{defaultBundle()}
 	}
 	b, err := loadBundle(args[0])
 	if err != nil {
@@ -209,7 +220,7 @@ func runValidate(args []string, strict bool) {
 		}
 	}
 	if bundlePath == "" {
-		exitErr(cerr.Usage("bundle path required"))
+		bundlePath = defaultBundle()
 	}
 	if format != "json" && format != "sarif" {
 		exitErr(cerr.Usage("--format must be json or sarif, got %q", format))
@@ -230,7 +241,9 @@ func runValidate(args []string, strict bool) {
 		kept = append(kept, f)
 	}
 
-	if format == "sarif" {
+	if format == "json" && humanOut {
+		printFindings(kept, r.Errors, len(kept)-r.Errors, strict)
+	} else if format == "sarif" {
 		out, err := validate.SARIF(kept, version)
 		if err != nil {
 			exitErr(cerr.Internal(err, "marshal sarif"))
@@ -276,7 +289,7 @@ func runIndex(args []string) {
 		exitErr(err)
 	}
 	if len(args) == 0 {
-		exitErr(cerr.Usage("bundle path required"))
+		args = []string{defaultBundle()}
 	}
 	root := args[0]
 	// Load before writing anything so a bundle that does not parse (issue
@@ -347,6 +360,10 @@ func runGraph(args []string) {
 
 func runList(args []string) {
 	b := mustBundle("list", args)
+	if humanOut {
+		printConcepts(b.Concepts)
+		return
+	}
 
 	concepts := make([]map[string]string, 0, len(b.Concepts))
 	for _, c := range b.Concepts {
@@ -373,13 +390,20 @@ func runShow(args []string) {
 	if err := rejectFlags("show", args); err != nil {
 		exitErr(err)
 	}
+	if len(args) == 1 {
+		args = []string{defaultBundle(), args[0]}
+	}
 	if len(args) < 2 {
-		exitErr(cerr.Usage("usage: okf show <bundle> <concept-id>"))
+		exitErr(cerr.Usage("usage: okf show [bundle] <concept-id>"))
 	}
 	b := mustBundle("show", args[:1])
-	c, err := show.Show(b, args[1])
+	c, err := show.Show(b, strings.TrimSuffix(args[1], ".md"))
 	if err != nil {
 		exitErr(cerr.Validation("%s", err))
+	}
+	if humanOut {
+		printConcept(c)
+		return
 	}
 
 	var tags []string
@@ -476,54 +500,71 @@ func runShow(args []string) {
 // --- search ---
 
 func runSearch(args []string) {
-	if len(args) == 0 {
-		exitErr(cerr.Usage("usage: okf search <bundle> [--tag <tag>] [--type <type>] [--text <query>]"))
-	}
-	if err := rejectFlags("search", args[:1]); err != nil {
-		exitErr(err)
-	}
-	bundlePath := args[0]
-	rest := args[1:]
-
 	f := search.Filters{}
-	for i := 0; i < len(rest); i++ {
-		switch rest[i] {
+	var pos []string
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
 		case "--tag":
-			if i+1 >= len(rest) {
+			if i+1 >= len(args) {
 				exitErr(cerr.Usage("--tag requires a value"))
 			}
-			f.Tag = rest[i+1]
+			f.Tag = args[i+1]
 			i++
 		case "--type":
-			if i+1 >= len(rest) {
+			if i+1 >= len(args) {
 				exitErr(cerr.Usage("--type requires a value"))
 			}
-			f.Type = rest[i+1]
+			f.Type = args[i+1]
 			i++
 		case "--text":
-			if i+1 >= len(rest) {
+			if i+1 >= len(args) {
 				exitErr(cerr.Usage("--text requires a value"))
 			}
-			f.Text = rest[i+1]
+			f.Text = args[i+1]
 			i++
 		default:
-			exitErr(cerr.Usage("unknown search flag: %s", rest[i]))
+			if strings.HasPrefix(args[i], "-") {
+				exitErr(cerr.Usage("unknown search flag: %s", args[i]))
+			}
+			pos = append(pos, args[i])
 		}
 	}
+
+	// The first positional argument is the bundle when it is a directory or
+	// is written as a path; otherwise every positional is a search term and
+	// the default bundle is searched.
+	bundlePath := defaultBundle()
+	if len(pos) > 0 && (isDir(pos[0]) || looksLikePath(pos[0])) {
+		bundlePath, pos = pos[0], pos[1:]
+	}
+	f.Terms = pos
 
 	b, lerr := loadBundle(bundlePath)
 	if lerr != nil {
 		exitErr(lerr)
 	}
 
-	results := search.Search(b, f)
-	concepts := make([]map[string]string, 0, len(results))
-	for _, c := range results {
-		concepts = append(concepts, map[string]string{
-			"id":    c.ID,
-			"type":  c.Frontmatter.Type,
-			"title": c.Frontmatter.Title,
-		})
+	hits := search.Find(b, f)
+	if humanOut {
+		printHits(hits, f.FoldedTerms())
+		return
+	}
+	concepts := make([]map[string]any, 0, len(hits))
+	for _, h := range hits {
+		r := map[string]any{
+			"id":    h.Concept.ID,
+			"type":  h.Concept.Frontmatter.Type,
+			"title": h.Concept.Frontmatter.Title,
+		}
+		if h.Lines != nil {
+			lines := h.Lines
+			if len(lines) > maxJSONLines {
+				lines = lines[:maxJSONLines]
+			}
+			r["matches"] = lines
+			r["match_count"] = len(h.Lines)
+		}
+		concepts = append(concepts, r)
 	}
 
 	outputJSON(map[string]any{
@@ -531,8 +572,30 @@ func runSearch(args []string) {
 		"bundle":  b.Root,
 		"filters": f,
 		"results": concepts,
-		"count":   len(results),
+		"count":   len(hits),
 	})
+}
+
+// maxJSONLines caps the matching lines reported per search result.
+const maxJSONLines = 5
+
+// defaultBundle is the bundle used when a command is given none.
+func defaultBundle() string {
+	if b := os.Getenv("OKF_BUNDLE"); b != "" {
+		return b
+	}
+	return "."
+}
+
+func isDir(p string) bool {
+	info, err := os.Stat(p)
+	return err == nil && info.IsDir()
+}
+
+// looksLikePath reports whether arg is written as a filesystem path, so a
+// mistyped bundle path is reported as missing instead of searched for.
+func looksLikePath(arg string) bool {
+	return strings.ContainsRune(arg, '/') || strings.HasPrefix(arg, ".") || strings.HasPrefix(arg, "~")
 }
 
 // --- init ---
@@ -569,12 +632,19 @@ func runBacklinks(args []string) {
 	if err := rejectFlags("backlinks", args); err != nil {
 		exitErr(err)
 	}
+	if len(args) == 1 {
+		args = []string{defaultBundle(), args[0]}
+	}
 	if len(args) < 2 {
-		exitErr(cerr.Usage("usage: okf backlinks <bundle> <concept-id>"))
+		exitErr(cerr.Usage("usage: okf backlinks [bundle] <concept-id>"))
 	}
 	b := mustBundle("backlinks", args[:1])
-	conceptID := args[1]
+	conceptID := strings.TrimSuffix(args[1], ".md")
 	links := backlinks.Backlinks(b, conceptID)
+	if humanOut {
+		printIDs(links)
+		return
+	}
 
 	if links == nil {
 		links = []string{} // emit empty array, not null
@@ -720,14 +790,33 @@ func allSchemaCommands() []schemaCommand {
 		{
 			Name:  "search",
 			Short: "Search concepts by tag, type, or text",
-			Long:  "Filters concepts in a bundle by tag (--tag), frontmatter type (--type), or full-text search in title, description, and body (--text). Multiple filters are AND-combined. With no filters, returns all concepts.",
+			Long:  "Filters concepts in a bundle by tag (--tag), frontmatter type (--type), or full-text search in title, description, and body (positional terms and/or --text). Text matching is substring-based, so it works for languages written without spaces such as Japanese; it ignores case, full-width/half-width ASCII, and katakana/hiragana. Multiple terms and filters are AND-combined. With text terms, results are ranked (title matches first, then by number of matching lines) and each carries up to 5 matching body lines with file line numbers (matches) and the total (match_count). The first positional argument is taken as the bundle when it is a directory or contains a slash; otherwise the bundle is $OKF_BUNDLE or the current directory. With no filters, returns all concepts.",
 			Flags: []schemaFlag{
 				{Name: "tag", Type: "string", Default: "", Description: "filter by tag (case-insensitive)"},
 				{Name: "type", Type: "string", Default: "", Description: "filter by frontmatter type (case-insensitive)"},
 				{Name: "text", Type: "string", Default: "", Description: "full-text search in title, description, and body (case-insensitive)"},
 			},
 			Args: []schemaArg{
-				{Name: "bundle", Required: true},
+				{Name: "bundle", Required: false},
+				{Name: "terms", Required: false},
+			},
+			Stdout:    "json",
+			ExitCodes: []int{cerr.ExitCodeOK, cerr.ExitCodeValidation, cerr.ExitCodeIO, cerr.ExitCodeUsage},
+		},
+		{
+			Name:  "new",
+			Short: "Create a new concept page",
+			Long:  "Writes <bundle>/<concept-id>.md with OKF frontmatter (type, title, empty description and tags, generated.by/at from $OKF_AUTHOR or human:$USER) and a title heading. Never overwrites: an existing file is a validation error. On a terminal the page is then opened in $VISUAL/$EDITOR unless --no-edit is given; otherwise it prints JSON with the new path. With one positional argument the bundle is $OKF_BUNDLE or the current directory.",
+			Flags: []schemaFlag{
+				{Name: "title", Type: "string", Default: "<last segment of concept-id>", Description: "concept title"},
+				{Name: "type", Type: "string", Default: defaultNewType, Description: "frontmatter type"},
+				{Name: "tag", Type: "string", Default: "", Description: "comma-separated tags; may be repeated"},
+				{Name: "description", Type: "string", Default: "", Description: "one-line description"},
+				{Name: "no-edit", Type: "bool", Default: "false", Description: "do not open an editor"},
+			},
+			Args: []schemaArg{
+				{Name: "bundle", Required: false},
+				{Name: "concept-id", Required: true},
 			},
 			Stdout:    "json",
 			ExitCodes: []int{cerr.ExitCodeOK, cerr.ExitCodeValidation, cerr.ExitCodeIO, cerr.ExitCodeUsage},

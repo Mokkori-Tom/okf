@@ -2,6 +2,8 @@
 package search
 
 import (
+	"os"
+	"sort"
 	"strings"
 
 	"github.com/okfcli/okf/internal/bundle"
@@ -10,14 +12,16 @@ import (
 
 // Filters holds optional filter criteria. Empty fields match everything.
 type Filters struct {
-	Tag  string // match if concept has this tag
-	Type string // match if concept frontmatter type equals this
-	Text string // match if text appears in title, description, or body (case-insensitive)
+	Tag   string   // match if concept has this tag
+	Type  string   // match if concept frontmatter type equals this
+	Text  string   // match if text appears in title, description, or body (case-insensitive)
+	Terms []string // match if every term appears in title, description, or body
 }
 
 // Search returns concepts matching all provided filters.
 // Empty filters return all concepts.
 func Search(b *bundle.Bundle, f Filters) []*concept.Concept {
+	terms := f.terms()
 	var results []*concept.Concept
 	for _, c := range b.Concepts {
 		if !matchTag(c, f.Tag) {
@@ -26,7 +30,7 @@ func Search(b *bundle.Bundle, f Filters) []*concept.Concept {
 		if !matchType(c, f.Type) {
 			continue
 		}
-		if !matchText(c, f.Text) {
+		if !matchTerms(c, terms) {
 			continue
 		}
 		results = append(results, c)
@@ -34,12 +38,68 @@ func Search(b *bundle.Bundle, f Filters) []*concept.Concept {
 	return results
 }
 
+// Line is one body line that contains at least one search term.
+type Line struct {
+	Number int    `json:"line"` // 1-based line number in the file
+	Text   string `json:"text"`
+}
+
+// Hit is a search result with the lines that matched.
+type Hit struct {
+	Concept *concept.Concept
+	Lines   []Line
+	inTitle bool
+}
+
+// Find runs Search and, when text terms are given, attaches the matching
+// lines and ranks results: concepts whose title holds every term first, then
+// by number of matching lines, then by ID. Without terms the ID order of
+// Search is kept.
+func Find(b *bundle.Bundle, f Filters) []Hit {
+	terms := f.terms()
+	results := Search(b, f)
+	hits := make([]Hit, 0, len(results))
+	for _, c := range results {
+		h := Hit{Concept: c}
+		if len(terms) > 0 {
+			h.Lines = matchLines(c.Path, terms)
+			h.inTitle = containsAll(Fold(c.Frontmatter.Title), terms)
+		}
+		hits = append(hits, h)
+	}
+	if len(terms) > 0 {
+		sort.SliceStable(hits, func(i, j int) bool {
+			if hits[i].inTitle != hits[j].inTitle {
+				return hits[i].inTitle
+			}
+			return len(hits[i].Lines) > len(hits[j].Lines)
+		})
+	}
+	return hits
+}
+
+// terms returns the folded, non-empty text terms of the filter (Text plus
+// Terms), as used for matching.
+func (f Filters) terms() []string {
+	raw := append([]string{f.Text}, f.Terms...)
+	var out []string
+	for _, t := range raw {
+		if t = strings.TrimSpace(Fold(t)); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// FoldedTerms is the exported form of terms, for callers that highlight hits.
+func (f Filters) FoldedTerms() []string { return f.terms() }
+
 func matchTag(c *concept.Concept, tag string) bool {
 	if tag == "" {
 		return true
 	}
 	for _, t := range c.Frontmatter.Tags {
-		if strings.EqualFold(t, tag) {
+		if Fold(t) == Fold(tag) {
 			return true
 		}
 	}
@@ -53,20 +113,52 @@ func matchType(c *concept.Concept, typ string) bool {
 	return strings.EqualFold(c.Frontmatter.Type, typ)
 }
 
-func matchText(c *concept.Concept, text string) bool {
-	if text == "" {
+// matchTerms reports whether every term appears in the title, description,
+// or body. Terms are already folded.
+func matchTerms(c *concept.Concept, terms []string) bool {
+	if len(terms) == 0 {
 		return true
 	}
-	lower := strings.ToLower(text)
-	// Search title, description, and body.
-	if strings.Contains(strings.ToLower(c.Frontmatter.Title), lower) {
-		return true
+	fm := c.Frontmatter
+	return containsAll(Fold(fm.Title+"\n"+fm.Description+"\n"+c.Body), terms)
+}
+
+func containsAll(folded string, terms []string) bool {
+	for _, t := range terms {
+		if !strings.Contains(folded, t) {
+			return false
+		}
 	}
-	if strings.Contains(strings.ToLower(c.Frontmatter.Description), lower) {
-		return true
+	return true
+}
+
+// matchLines returns the body lines of the file at path that contain any of
+// the folded terms, numbered as in the file so an editor can jump to them.
+func matchLines(path string, terms []string) []Line {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil
 	}
-	if strings.Contains(strings.ToLower(c.Body), lower) {
-		return true
+	lines := strings.Split(strings.TrimPrefix(string(raw), "\uFEFF"), "\n")
+	start := 0
+	if len(lines) > 0 && strings.TrimRight(lines[0], "\r") == "---" {
+		for i := 1; i < len(lines); i++ {
+			if strings.TrimRight(lines[i], "\r") == "---" {
+				start = i + 1
+				break
+			}
+		}
 	}
-	return false
+	var out []Line
+	for i := start; i < len(lines); i++ {
+		text := strings.TrimRight(lines[i], "\r")
+		folded := Fold(text)
+		for _, t := range terms {
+			if strings.Contains(folded, t) {
+				out = append(out, Line{Number: i + 1, Text: text})
+				break
+			}
+		}
+	}
+	return out
 }

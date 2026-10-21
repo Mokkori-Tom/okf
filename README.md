@@ -4,6 +4,20 @@ A Go CLI toolkit for the [Open Knowledge Format (OKF)](https://github.com/Google
 
 `okf` creates, validates, lints, indexes, searches, and inspects OKF knowledge bundles. One static binary, no runtime dependencies, fast enough to validate millions of concepts.
 
+> **This fork** ([Mokkori-Tom/okf](https://github.com/Mokkori-Tom/okf), branch `ja-human`) adds everyday use by people, while keeping JSON for agents and pipes:
+>
+> - **Plain-text output on a terminal.** When stdout is a terminal, `list`, `search`, `show`, `backlinks`, `validate`, `lint` and `new` print readable text; piped or agent-driven runs still get the same JSON. Force a mode with `--json` / `--human` or `OKF_OUTPUT=json|human`. `NO_COLOR` disables colors.
+> - **`okf new [bundle] <concept-id>`** writes a page with OKF frontmatter (`type`, `title`, empty `description`/`tags`, `generated.by/at`) and opens it in `$VISUAL`/`$EDITOR`. It never overwrites an existing page. Flags: `--title`, `--type` (default `Note`), `--tag a,b`, `--description`, `--no-edit`. The author is `$OKF_AUTHOR`, else `human:$USER`.
+> - **Search that works for Japanese.** `okf search [bundle] 電力 上限` takes terms directly (AND), matches substrings, and ignores case, full-width/half-width ASCII and katakana/hiragana (`ふぁん` finds `ファン`). Results are ranked (title matches first) and include matching lines with file line numbers (`matches`, `match_count` in JSON). `--text`, `--tag` and `--type` still work.
+> - **Default bundle.** The bundle argument may be left out; `$OKF_BUNDLE` is used, else the current directory.
+>
+> Build from source (the module path is unchanged, so `go install` from the fork path does not work):
+>
+> ```bash
+> git clone -b ja-human https://github.com/Mokkori-Tom/okf.git && cd okf && go build -o ~/.local/bin/okf ./cmd/okf
+> # Termux: the same, with $PREFIX/bin/okf. Or cross-build: CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build ./cmd/okf
+> ```
+
 ## Why okf?
 
 Google's reference OKF implementation is Python + Gemini + BigQuery - vendor-locked to Google's cloud. `okf` is the vendor-neutral alternative: a single Go binary that works anywhere, speaks JSON natively, and is designed to be driven by any AI agent on any provider.
@@ -133,7 +147,8 @@ Progressive disclosure (index.md) lets the agent navigate level by level instead
 | `okf index <bundle>` | Generate index.md files (progressive disclosure) |
 | `okf list <bundle>` | List all concepts with ID, type, title, status, trust tier |
 | `okf show <bundle> <concept-id>` | Show a single concept's full content as JSON |
-| `okf search <bundle> [--tag] [--type] [--text]` | Search concepts by tag, type, or text |
+| `okf search [bundle] [terms...] [--tag] [--type] [--text]` | Search concepts by tag, type, or text |
+| `okf new [bundle] <concept-id> [--title] [--type] [--tag] [--no-edit]` | Create a concept page and open it in $EDITOR |
 | `okf backlinks <bundle> <concept-id>` | List concepts that link to a given concept |
 | `okf graph <bundle>` | Print cross-link graph with nodes, edges, and stats |
 | `okf version` | Print version |
