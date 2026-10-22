@@ -9,6 +9,7 @@
 package validate
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -390,6 +391,10 @@ func checkLocalPath(r *Report, b *bundle.Bundle, c *concept.Concept, field, path
 // validateReserved checks index.md and log.md structure (§8, §9, §12).
 func validateReserved(r *Report, b *bundle.Bundle) {
 	for _, c := range b.Reserved {
+		if err := c.FrontmatterErr; err != nil && !errors.Is(err, concept.ErrNoFrontmatter) {
+			r.add(c.ID, RuleFrontmatterInvalid, SeverityError, "frontmatter: "+err.Error())
+			continue
+		}
 		isIndex := c.ID == "index" || strings.HasSuffix(c.ID, "/index")
 		isLog := c.ID == "log" || strings.HasSuffix(c.ID, "/log")
 		switch {

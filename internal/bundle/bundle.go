@@ -2,7 +2,6 @@
 package bundle
 
 import (
-	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -20,37 +19,23 @@ type Bundle struct {
 	conceptByID  map[string]*concept.Concept
 	Reserved     []*concept.Concept // index.md / log.md files (parsed if present)
 	reservedByID map[string]*concept.Concept
+	Unreadable   []LoadError // files and directories skipped because they could not be read
 }
 
-// ParseError reports a .md file whose contents could not be parsed as a
-// concept: no frontmatter block, an unclosed one, or invalid YAML. Path is
-// bundle-relative so callers can name the file (issue #27). It is distinct
-// from a filesystem failure, which is returned unwrapped as an I/O error.
-type ParseError struct {
-	Path string
+// LoadError records a file or directory that could not be read. The rest of
+// the bundle still loads; validate reports each one.
+type LoadError struct {
+	Path string // bundle-relative, slash-separated
 	Err  error
-}
-
-func (e *ParseError) Error() string { return "parse " + e.Path + ": " + e.Err.Error() }
-
-// Unwrap exposes the underlying parse failure for errors.Is / errors.As.
-func (e *ParseError) Unwrap() error { return e.Err }
-
-// wrapParse classifies a concept parse failure: a filesystem error stays an
-// I/O error, anything else is a ParseError naming the file.
-func wrapParse(relPath string, err error) error {
-	var pathErr *fs.PathError
-	if errors.As(err, &pathErr) {
-		return fmt.Errorf("read %s: %w", relPath, err)
-	}
-	return &ParseError{Path: relPath, Err: err}
 }
 
 // Load walks a bundle directory and parses every .md file.
 // Reserved filenames (index.md, log.md) are separated into Reserved.
-// Concepts with missing or malformed frontmatter are loaded with
-// FrontmatterErr set (see concept.ParseLenient); malformed frontmatter in a
-// reserved file is still a ParseError.
+// Loading is lenient so that one bad file never hides the rest: concepts with
+// missing or malformed frontmatter are kept with FrontmatterErr set (see
+// concept.ParseLenient), and files that cannot be read are listed in
+// Unreadable. Only a missing or unreadable root is an error.
+// A root that is a symlink is followed; paths stay under the given root.
 func Load(root string) (*Bundle, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
@@ -63,6 +48,12 @@ func Load(root string) (*Bundle, error) {
 	if !info.IsDir() {
 		return nil, fmt.Errorf("bundle root %s is not a directory", absRoot)
 	}
+	// WalkDir does not descend into a root that is itself a symlink, so walk
+	// the resolved directory and map paths back under absRoot.
+	walkRoot, err := filepath.EvalSymlinks(absRoot)
+	if err != nil {
+		return nil, fmt.Errorf("resolve bundle root %s: %w", absRoot, err)
+	}
 
 	b := &Bundle{
 		Root:         absRoot,
@@ -70,13 +61,25 @@ func Load(root string) (*Bundle, error) {
 		reservedByID: make(map[string]*concept.Concept),
 	}
 
-	err = filepath.WalkDir(absRoot, func(path string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(walkRoot, func(walked string, d fs.DirEntry, err error) error {
+		rel, rerr := filepath.Rel(walkRoot, walked)
+		if rerr != nil {
+			return fmt.Errorf("rel path %s: %w", walked, rerr)
+		}
+		relPath := filepath.ToSlash(rel)
 		if err != nil {
-			return err
+			if walked == walkRoot {
+				return err
+			}
+			b.Unreadable = append(b.Unreadable, LoadError{Path: relPath, Err: err})
+			if d != nil && d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if d.IsDir() {
 			// Skip hidden directories like .git
-			if d.Name() != filepath.Base(absRoot) && strings.HasPrefix(d.Name(), ".") {
+			if walked != walkRoot && strings.HasPrefix(d.Name(), ".") {
 				return filepath.SkipDir
 			}
 			return nil
@@ -86,33 +89,19 @@ func Load(root string) (*Bundle, error) {
 		if !strings.HasSuffix(d.Name(), ".md") || strings.HasPrefix(d.Name(), ".") {
 			return nil
 		}
+		path := filepath.Join(absRoot, rel)
 
-		relPath, err := filepath.Rel(absRoot, path)
-		if err != nil {
-			return fmt.Errorf("rel path %s: %w", path, err)
+		// index.md / log.md may lack frontmatter, and broken frontmatter in
+		// them is reported by validate, like for concepts.
+		c, perr := concept.ParseLenient(path, relPath)
+		if perr != nil {
+			b.Unreadable = append(b.Unreadable, LoadError{Path: relPath, Err: perr})
+			return nil
 		}
-		relPath = filepath.ToSlash(relPath)
-
-		// Reserved filenames are loaded separately; they may lack frontmatter.
-		// ParseReserved reads the file once and tolerates a missing frontmatter
-		// block (e.g. generated index.md), but still surfaces malformed
-		// frontmatter and other errors rather than silently dropping the file.
 		if concept.ReservedNames[strings.ToLower(d.Name())] {
-			c, perr := concept.ParseReserved(path, relPath)
-			if perr != nil {
-				return wrapParse(relPath, perr)
-			}
 			b.Reserved = append(b.Reserved, c)
 			b.reservedByID[c.ID] = c
 			return nil
-		}
-
-		// Concepts load leniently: a note without (or with broken)
-		// frontmatter is kept and reported by validate instead of taking
-		// the whole bundle down. Only filesystem failures stop the load.
-		c, err := concept.ParseLenient(path, relPath)
-		if err != nil {
-			return wrapParse(relPath, err)
 		}
 		b.Concepts = append(b.Concepts, c)
 		b.conceptByID[c.ID] = c

@@ -12,6 +12,8 @@ import (
 // change and must fail here.
 var allRuleIDs = []string{
 	"okf/body/empty",
+	"okf/bundle/empty",
+	"okf/bundle/unreadable",
 	"okf/computation/duplicate",
 	"okf/computation/missing",
 	"okf/computation/parameter-incomplete",

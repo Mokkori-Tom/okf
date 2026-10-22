@@ -62,6 +62,14 @@ func Validate(b *bundle.Bundle) *Report {
 	}
 	validateLinks(r, b)
 	validateReserved(r, b)
+	// A bundle with nothing in it is almost always the wrong path (or a
+	// symlink that was not followed), so it must not pass silently.
+	if len(b.Concepts) == 0 {
+		r.add("", RuleBundleEmpty, SeverityError, "no concept documents found under "+b.Root+"; check the bundle path")
+	}
+	for _, u := range b.Unreadable {
+		r.add(strings.TrimSuffix(u.Path, ".md"), RuleBundleUnreadable, SeverityError, "could not read "+u.Path+": "+u.Err.Error())
+	}
 	return r
 }
 

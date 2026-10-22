@@ -58,12 +58,61 @@ func TestLoadBundle_PlainMarkdownLoads(t *testing.T) {
 	}
 }
 
-func TestLoadBundle_BrokenReservedFrontmatterIsValidationError(t *testing.T) {
+func TestE2E_OneBadFileDoesNotStopTheBundle(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "index.md"), "---\nokf_version: [\n---\n# Demo\n")
-	_, err := loadBundle(dir)
-	if err == nil || err.Kind != cerr.KindValidation || !strings.Contains(err.Message, "index.md") {
-		t.Fatalf("got %v, want a validation error naming index.md", err)
+	writeFile(t, filepath.Join(dir, "a.md"), "---\ntype: T\ntitle: A\n---\n\nbody")
+	writeFile(t, filepath.Join(dir, "secret.md"), "---\ntype: T\n---\n\nbody")
+	if err := os.Chmod(filepath.Join(dir, "secret.md"), 0); err != nil {
+		t.Fatal(err)
+	}
+	if f, err := os.Open(filepath.Join(dir, "secret.md")); err == nil {
+		f.Close()
+		t.Skip("running with permissions that can read a mode-000 file")
+	}
+
+	out, code := runOKF(t, "list", dir)
+	if code != 0 || !strings.Contains(out, `"count": 1`) {
+		t.Errorf("list: exit %d; out=%s", code, out)
+	}
+	out, code = runOKF(t, "validate", dir)
+	if code != cerr.ExitCodeValidation {
+		t.Errorf("validate: exit %d, want %d; out=%s", code, cerr.ExitCodeValidation, out)
+	}
+	for _, want := range []string{`"rule": "okf/bundle/unreadable"`, `"concept_id": "secret"`, `"rule": "okf/frontmatter/invalid"`, `"concept_id": "index"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("validate output lacks %s: %s", want, out)
+		}
+	}
+}
+
+func TestE2E_SymlinkedRoot(t *testing.T) {
+	real := t.TempDir()
+	writeFile(t, filepath.Join(real, "notes", "a.md"), "---\ntype: T\ntitle: 電力\n---\n\nbody")
+	link := filepath.Join(t.TempDir(), "kb")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skip("symlinks unsupported:", err)
+	}
+	out, code := runOKF(t, "list", link)
+	if code != 0 || !strings.Contains(out, `"count": 1`) {
+		t.Fatalf("list via symlink: exit %d; out=%s", code, out)
+	}
+	if out, _ := runOKF(t, "show", link, "notes/a"); !strings.Contains(out, `"path": "`+filepath.Join(link, "notes", "a.md")+`"`) {
+		t.Errorf("show path is not under the symlinked root: %s", out)
+	}
+	if _, code := runOKF(t, "validate", link); code != 0 {
+		t.Errorf("validate via symlink: exit %d", code)
+	}
+	if out, code := runOKF(t, "index", link); code != 0 || !strings.Contains(out, `"count": 2`) {
+		t.Errorf("index via symlink: exit %d; out=%s", code, out)
+	}
+}
+
+func TestE2E_EmptyBundleFailsValidate(t *testing.T) {
+	dir := t.TempDir()
+	out, code := runOKF(t, "validate", dir)
+	if code != cerr.ExitCodeValidation || !strings.Contains(out, `"rule": "okf/bundle/empty"`) {
+		t.Errorf("validate empty: exit %d; out=%s", code, out)
 	}
 }
 

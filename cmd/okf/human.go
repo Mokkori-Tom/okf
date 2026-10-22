@@ -247,7 +247,11 @@ func printFindings(findings []validate.Finding, errs, warns int, strict bool) {
 		} else {
 			sev = style("33", sev)
 		}
-		fmt.Printf("%s  %s  %s %s\n", sev, bold(f.ConceptID), f.Message, dim("("+f.RuleID+")"))
+		id := f.ConceptID
+		if id == "" {
+			id = "(bundle)"
+		}
+		fmt.Printf("%s  %s  %s %s\n", sev, bold(id), f.Message, dim("("+f.RuleID+")"))
 	}
 	switch {
 	case strict && errs == 0 && warns == 0:

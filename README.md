@@ -6,11 +6,14 @@ A Go CLI toolkit for the [Open Knowledge Format (OKF)](https://github.com/Google
 
 > **This fork** ([Mokkori-Tom/okf](https://github.com/Mokkori-Tom/okf), branch `ja-human`) adds everyday use by people, while keeping JSON for agents and pipes:
 >
+> 日本語のはじめかた: [docs/GETTING_STARTED.ja.md](docs/GETTING_STARTED.ja.md)
+>
 > - **Plain-text output on a terminal.** When stdout is a terminal, `list`, `search`, `show`, `backlinks`, `validate`, `lint` and `new` print readable text; piped or agent-driven runs still get the same JSON. Force a mode with `--json` / `--human` or `OKF_OUTPUT=json|human`. `NO_COLOR` disables colors.
 > - **`okf new [bundle] <concept-id>`** writes a page with OKF frontmatter (`type`, `title`, empty `description`/`tags`, `generated.by/at`) and opens it in `$VISUAL`/`$EDITOR`. It never overwrites an existing page. Flags: `--title`, `--type` (default `Note`), `--tag a,b`, `--description`, `--no-edit`. The author is `$OKF_AUTHOR`, else `human:$USER`.
 > - **Search that works for Japanese.** `okf search [bundle] 電力 上限` takes terms directly (AND), matches substrings, and ignores case, full-width/half-width ASCII and katakana/hiragana (`ふぁん` finds `ファン`). Results are ranked (title matches first) and include matching lines with file line numbers (`matches`, `match_count` in JSON). `--text`, `--tag` and `--type` still work.
 > - **`okf show` takes a file path.** `okf show notes/gpu.md` reads that file directly, without loading the rest of the bundle, so it works from anywhere and even on plain markdown without frontmatter.
 > - **Plain notes are welcome.** A `.md` without frontmatter, or whose frontmatter has no `type` (an Obsidian vault, say), loads and searches like any concept; its title falls back to the first `# ` heading, then the file name. `validate` reports each such note with a single warning (`okf/frontmatter/missing` or `okf/frontmatter/type-required`) and skips the field checks. Adding `type` turns a note into an OKF concept and turns the full checks on. Frontmatter that is present but unparseable is an error (`okf/frontmatter/invalid`).
+> - **One bad file never hides the rest.** Unreadable files and broken frontmatter in `index.md`/`log.md` are skipped with a warning on stderr and reported by `validate` (`okf/bundle/unreadable`, `okf/frontmatter/invalid`). A bundle root that is a symlink is followed. `validate` fails on a bundle with no concepts (`okf/bundle/empty`), which is almost always a wrong path.
 > - **Default bundle.** The bundle argument may be left out; `$OKF_BUNDLE` is used, else the current directory.
 >
 > Build from source (the module path is unchanged, so `go install` from the fork path does not work):

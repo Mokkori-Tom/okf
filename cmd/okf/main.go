@@ -10,7 +10,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -157,22 +156,18 @@ func rejectFlags(cmd string, args []string) *cerr.Error {
 	return nil
 }
 
-// loadBundle loads the bundle at path and maps loader failures onto the
-// error kinds the CLI documents. A .md file that is not a concept violates
-// OKF §11, so it is a validation error that names the file (issue #27);
-// anything else is a filesystem error.
+// loadBundle loads the bundle at path. Loading is lenient (see bundle.Load),
+// so only a missing or unreadable root fails; files that were skipped are
+// named on stderr, and validate reports them as errors.
 func loadBundle(path string) (*bundle.Bundle, *cerr.Error) {
 	b, err := bundle.Load(path)
-	if err == nil {
-		return b, nil
+	if err != nil {
+		return nil, cerr.IO(err, "load bundle %s", path)
 	}
-	var pe *bundle.ParseError
-	if errors.As(err, &pe) {
-		e := cerr.Validation("load bundle %s: %v", path, err)
-		e.Hint = "every non-reserved .md file in a bundle needs a YAML frontmatter block (OKF §11); add frontmatter to " + pe.Path + " or move it out of the bundle"
-		return nil, e
+	for _, u := range b.Unreadable {
+		fmt.Fprintf(os.Stderr, "warning: skipped %s: %v\n", u.Path, u.Err)
 	}
-	return nil, cerr.IO(err, "load bundle %s", path)
+	return b, nil
 }
 
 func mustBundle(cmd string, args []string) *bundle.Bundle {

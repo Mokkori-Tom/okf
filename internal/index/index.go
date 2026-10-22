@@ -22,6 +22,10 @@ func Generate(root string) error {
 	if err != nil {
 		return err
 	}
+	// Follow a symlinked root; WalkDir would not descend into it.
+	if real, err := filepath.EvalSymlinks(absRoot); err == nil {
+		absRoot = real
+	}
 	return filepath.WalkDir(absRoot, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err

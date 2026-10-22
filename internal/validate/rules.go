@@ -17,6 +17,10 @@ const (
 	// body: markdown body structure (§4.2)
 	RuleBodyEmpty = "okf/body/empty"
 
+	// bundle: the bundle as a whole
+	RuleBundleEmpty      = "okf/bundle/empty"
+	RuleBundleUnreadable = "okf/bundle/unreadable"
+
 	// links: cross-link resolution (§6)
 	RuleLinkBroken = "okf/links/broken"
 
@@ -71,6 +75,9 @@ var ruleDescriptions = map[string]string{
 	RuleTimestampFuture:        "frontmatter 'timestamp' is more than a year in the future",
 
 	RuleBodyEmpty: "body is empty, structural markdown is recommended (OKF §4.2)",
+
+	RuleBundleEmpty:      "the bundle contains no concept documents",
+	RuleBundleUnreadable: "a file or directory in the bundle could not be read",
 
 	RuleLinkBroken: "cross-link does not resolve to a concept in the bundle; consumers must tolerate this (OKF §6.1, §11)",
 
