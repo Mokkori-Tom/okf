@@ -163,9 +163,14 @@ func TestE2E_ShowByFilePath(t *testing.T) {
 	if code != 0 || json.Unmarshal([]byte(out), &res) != nil || res.Concept.ID != "notes/gpu" {
 		t.Errorf("show inside bundle: exit %d; out=%s", code, out)
 	}
+	// Rendered: the title heading is drawn once, as the header.
 	out, code = runOKFIn(t, dir, nil, "show", "--human", "plain.md")
-	if code != 0 || !strings.HasPrefix(out, "ただのメモ\nplain.md  no frontmatter\n\n# ただのメモ\n") {
+	if code != 0 || out != "ただのメモ\n━━━━━━━━━━\nplain.md  no frontmatter\n\n本文\n" {
 		t.Errorf("show plain markdown: exit %d; out=%q", code, out)
+	}
+	out, code = runOKFIn(t, dir, nil, "show", "--human", "--raw", "plain.md")
+	if code != 0 || out != "ただのメモ\nplain.md  no frontmatter\n\n# ただのメモ\n\n本文\n" {
+		t.Errorf("show --raw: exit %d; out=%q", code, out)
 	}
 	// The plain file does not stop the bundle from loading for IDs either.
 	if _, code := runOKFIn(t, dir, nil, "show", "notes/gpu"); code != 0 {

@@ -9,10 +9,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/okfcli/okf/internal/concept"
+	"github.com/okfcli/okf/internal/render"
 	"github.com/okfcli/okf/internal/search"
 	"github.com/okfcli/okf/internal/validate"
 )
@@ -65,6 +68,18 @@ func style(code, s string) string {
 func bold(s string) string { return style("1", s) }
 func dim(s string) string  { return style("2", s) }
 
+// displayPathIn shows p relative to the working directory when it lies
+// inside it, else relative to the bundle root, else as is.
+func displayPathIn(p, root string) string {
+	if d := displayPath(p); d != p {
+		return d
+	}
+	if rel, err := filepath.Rel(root, p); err == nil && !strings.HasPrefix(rel, "..") {
+		return rel
+	}
+	return p
+}
+
 // displayPath shows p relative to the working directory when that is shorter.
 func displayPath(p string) string {
 	wd, err := os.Getwd()
@@ -78,30 +93,7 @@ func displayPath(p string) string {
 	return rel
 }
 
-// width approximates the terminal width of s: East Asian wide and full-width
-// runes take two cells.
-func width(s string) int {
-	w := 0
-	for _, r := range s {
-		w++
-		if isWide(r) {
-			w++
-		}
-	}
-	return w
-}
-
-func isWide(r rune) bool {
-	return (r >= 0x1100 && r <= 0x115F) ||
-		(r >= 0x2E80 && r <= 0xA4CF && r != 0x303F) ||
-		(r >= 0xAC00 && r <= 0xD7A3) ||
-		(r >= 0xF900 && r <= 0xFAFF) ||
-		(r >= 0xFE30 && r <= 0xFE4F) ||
-		(r >= 0xFF00 && r <= 0xFF60) ||
-		(r >= 0xFFE0 && r <= 0xFFE6) ||
-		(r >= 0x1F300 && r <= 0x1FAFF) ||
-		(r >= 0x20000 && r <= 0x3FFFD)
-}
+func width(s string) int { return render.Width(s) }
 
 func pad(s string, w int) string {
 	if d := w - width(s); d > 0 {
@@ -217,26 +209,110 @@ func printHits(hits []search.Hit, terms []string) {
 	fmt.Fprintln(os.Stderr, dim(fmt.Sprintf("%d found", len(hits))))
 }
 
-func printConcept(c *concept.Concept) {
+// printConcept shows one page. Unless raw, the body is rendered as markdown
+// (headings, lists, callouts, tables, inline styles) for the terminal width,
+// and on a terminal long output goes through a pager.
+func printConcept(c *concept.Concept, root string, raw, noPager bool) {
 	fm := c.Frontmatter
-	fmt.Println(bold(c.DisplayTitle()))
-	meta := []string{displayPath(c.Path)}
+	o := render.Options{Width: termWidth(), Color: useColor}
+	var b strings.Builder
+
+	meta := []string{displayPathIn(c.Path, root)}
 	if errors.Is(c.FrontmatterErr, concept.ErrNoFrontmatter) {
 		meta = append(meta, "no frontmatter")
 	} else if c.FrontmatterErr != nil {
-		meta = append(meta, style("31", "invalid frontmatter"))
+		meta = append(meta, "invalid frontmatter")
 	} else {
 		meta = append(meta, "type: "+fm.Type, "status: "+fm.EffectiveStatus())
 	}
 	if len(fm.Tags) > 0 {
 		meta = append(meta, "tags: "+strings.Join(fm.Tags, ", "))
 	}
-	fmt.Println(dim(strings.Join(meta, "  ")))
-	if fm.Description != "" {
-		fmt.Println(fm.Description)
+
+	body := strings.TrimRight(c.Body, "\n")
+	if raw {
+		b.WriteString(bold(c.DisplayTitle()) + "\n" + dim(strings.Join(meta, "  ")) + "\n")
+		if fm.Description != "" {
+			b.WriteString(fm.Description + "\n")
+		}
+		b.WriteString("\n" + body + "\n")
+	} else {
+		body = dropTitleHeading(body, c.DisplayTitle())
+		b.WriteString(render.Heading(c.DisplayTitle(), 1, o))
+		b.WriteString(render.Text(strings.Join(meta, "  "), "2", o))
+		if fm.Description != "" {
+			b.WriteString(render.Markdown("*"+fm.Description+"*", o))
+		}
+		if strings.TrimSpace(body) != "" {
+			b.WriteString("\n" + render.Markdown(body, o))
+		}
 	}
-	fmt.Println()
-	fmt.Print(strings.TrimRight(c.Body, "\n") + "\n")
+	page(b.String(), noPager)
+}
+
+// dropTitleHeading removes a leading "# title" line that repeats the title
+// already shown in the header.
+func dropTitleHeading(body, title string) string {
+	trimmed := strings.TrimLeft(body, "\n")
+	first, rest, _ := strings.Cut(trimmed, "\n")
+	if h, ok := strings.CutPrefix(strings.TrimSpace(first), "# "); ok && strings.TrimSpace(h) == title {
+		return rest
+	}
+	return body
+}
+
+// termWidth is the width to render for: $COLUMNS, else the terminal's, else
+// 80, capped at 120 so long lines stay readable.
+func termWidth() int {
+	w := 0
+	if n, err := strconv.Atoi(os.Getenv("COLUMNS")); err == nil && n > 0 {
+		w = n
+	} else {
+		w = ttyWidth(os.Stdout)
+	}
+	if w <= 0 {
+		w = 80
+	}
+	return min(w, 120)
+}
+
+// page writes out, through $OKF_PAGER or $PAGER (default less) when stdout
+// is a terminal. less gets LESS=FRX unless LESS is set, so short pages print
+// directly and colors survive. Falls back to plain output when no pager runs.
+func page(out string, noPager bool) {
+	if noPager || !isTerminal(os.Stdout) {
+		fmt.Print(out)
+		return
+	}
+	pager := os.Getenv("OKF_PAGER")
+	if pager == "" {
+		pager = os.Getenv("PAGER")
+	}
+	if pager == "" {
+		pager = "less"
+	}
+	name := strings.Fields(pager)
+	if len(name) == 0 || name[0] == "cat" {
+		fmt.Print(out)
+		return
+	}
+	if _, err := exec.LookPath(name[0]); err != nil {
+		fmt.Print(out)
+		return
+	}
+	cmd := exec.Command("sh", "-c", pager) //nolint:gosec // the user's own pager setting
+	cmd.Stdin = strings.NewReader(out)
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	cmd.Env = os.Environ()
+	if os.Getenv("LESS") == "" {
+		cmd.Env = append(cmd.Env, "LESS=FRX")
+	}
+	if err := cmd.Run(); err != nil {
+		var ee *exec.ExitError
+		if !errors.As(err, &ee) {
+			fmt.Print(out)
+		}
+	}
 }
 
 func printFindings(findings []validate.Finding, errs, warns int, strict bool) {

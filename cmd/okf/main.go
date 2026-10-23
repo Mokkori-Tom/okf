@@ -384,6 +384,19 @@ func runList(args []string) {
 // --- show ---
 
 func runShow(args []string) {
+	raw, noPager := false, false
+	var pos []string
+	for _, a := range args {
+		switch a {
+		case "--raw":
+			raw = true
+		case "--no-pager":
+			noPager = true
+		default:
+			pos = append(pos, a)
+		}
+	}
+	args = pos
 	if err := rejectFlags("show", args); err != nil {
 		exitErr(err)
 	}
@@ -412,7 +425,7 @@ func runShow(args []string) {
 		root = b.Root
 	}
 	if humanOut {
-		printConcept(c)
+		printConcept(c, root, raw, noPager)
 		return
 	}
 
@@ -795,7 +808,11 @@ func allSchemaCommands() []schemaCommand {
 		{
 			Name:  "show",
 			Short: "Show a single concept's full content",
-			Long:  "Accepts a concept ID or a path to an existing .md file; a file path is read directly without loading the rest of the bundle, and a file without frontmatter is shown with empty frontmatter. Returns the concept's ID, file path, frontmatter (type, title, description, resource, tags), trust and lifecycle state (status, trust_tier, stale, generated, verified, stale_after), provenance (sources, usage_window), the Attested Computation contract when present (runtime, parameters, computation, executor, attester), and markdown body as JSON.",
+			Flags: []schemaFlag{
+				{Name: "raw", Type: "bool", Default: "false", Description: "human output only: print the markdown body as written instead of rendering it"},
+				{Name: "no-pager", Type: "bool", Default: "false", Description: "human output only: do not page long output through $OKF_PAGER / $PAGER / less"},
+			},
+			Long: "Accepts a concept ID or a path to an existing .md file; a file path is read directly without loading the rest of the bundle, and a file without frontmatter is shown with empty frontmatter. Returns the concept's ID, file path, frontmatter (type, title, description, resource, tags), trust and lifecycle state (status, trust_tier, stale, generated, verified, stale_after), provenance (sources, usage_window), the Attested Computation contract when present (runtime, parameters, computation, executor, attester), and markdown body as JSON.",
 			Args: []schemaArg{
 				{Name: "bundle", Required: true},
 				{Name: "concept-id", Required: true},
