@@ -324,6 +324,9 @@ func isExternalURL(target string) bool {
 	return strings.HasPrefix(target, "http://") ||
 		strings.HasPrefix(target, "https://") ||
 		strings.HasPrefix(target, "mailto:") ||
+		// data: URIs embed their content (inline images), so they point at
+		// nothing in the bundle.
+		len(target) >= 5 && strings.EqualFold(target[:5], "data:") ||
 		strings.HasPrefix(target, "#")
 }
 

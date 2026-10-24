@@ -125,3 +125,22 @@ func TestValidate_StrictChecksAsOKF(t *testing.T) {
 		}
 	}
 }
+
+func TestValidate_DataURIsAreNotCheckedOrFollowed(t *testing.T) {
+	dir := t.TempDir()
+	content := "---\ntype: Note\ntitle: A\ndescription: d\ntags: [x]\n---\n\n![img](data:image/png;base64,iVBORw0KGgo=) [x](DATA:text/plain,hi) [m](missing.md)\n"
+	if err := os.WriteFile(filepath.Join(dir, "a.md"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	b, err := bundle.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := Validate(b)
+	if len(r.Findings) != 1 || !strings.Contains(r.Findings[0].Message, "missing.md") {
+		t.Errorf("findings = %+v, want only the missing.md link", r.Findings)
+	}
+	if got := ResolveLink("a", Link{Target: "data:image/png;base64,xx"}); got != "" {
+		t.Errorf("data: resolved to %q, want \"\"", got)
+	}
+}
