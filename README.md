@@ -4,7 +4,7 @@ A Go CLI toolkit for the [Open Knowledge Format (OKF)](https://github.com/Google
 
 `okf` creates, validates, lints, indexes, searches, and inspects OKF knowledge bundles. One static binary, no runtime dependencies, fast enough to validate millions of concepts.
 
-> **This fork** ([Mokkori-Tom/okf](https://github.com/Mokkori-Tom/okf), branch `ja-human`) adds everyday use by people, while keeping JSON for agents and pipes:
+> **This fork** ([Mokkori-Tom/okf](https://github.com/Mokkori-Tom/okf), branch `ja-human`) follows OKF and is lenient with Obsidian vaults: notes without frontmatter or `type`, and `[[wikilinks]]`, are read and followed but not held against the bundle. `okf validate --strict` checks the bundle as OKF and nothing more lenient. It also adds everyday use by people, while keeping JSON for agents and pipes:
 >
 > 日本語のはじめかた: [docs/GETTING_STARTED.ja.md](docs/GETTING_STARTED.ja.md)
 >

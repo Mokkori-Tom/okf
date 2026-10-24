@@ -209,8 +209,11 @@ func runValidate(args []string, strict bool) {
 	bundlePath := ""
 	format := "json"
 	exitZero := false
+	strictMode := false
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
+		case "--strict":
+			strictMode = true
 		case "--format":
 			if i+1 >= len(args) {
 				exitErr(cerr.Usage("--format requires a value"))
@@ -244,7 +247,7 @@ func runValidate(args []string, strict bool) {
 	if lerr != nil {
 		exitErr(lerr)
 	}
-	r := validate.Validate(b)
+	r := validate.ValidateWith(b, validate.Options{Strict: strictMode})
 
 	// lint reports warnings only; validate reports everything.
 	kept := make([]validate.Finding, 0, len(r.Findings))
@@ -281,6 +284,7 @@ func runValidate(args []string, strict bool) {
 			"errors":   r.Errors,
 			"warnings": r.Warnings,
 			"valid":    !r.HasErrors(),
+			"strict":   strictMode,
 		})
 	}
 
@@ -786,8 +790,9 @@ func allSchemaCommands() []schemaCommand {
 		{
 			Name:  "validate",
 			Short: "Validate a bundle against the OKF spec",
-			Long:  "Checks every concept against OKF v0.2: required frontmatter (type), recommended fields (title, description, tags), non-empty body, valid cross-links, the provenance/trust/lifecycle families (sources, generated, verified, status, stale_after), the Attested Computation contract (runtime, parameters, computation, executor, attester), reserved-file structure (index.md, log.md), and legacy v0.1 constructs (timestamp, # Citations). Every finding carries a stable rule ID (okf/<family>/<check>). With --format sarif, stdout is a SARIF 2.1.0 document for CI code scanning. Exits 1 if any errors are found, unless --exit-zero is set. JSON output: findings is the list (concept_id, rule, severity, message); errors and warnings are counts; valid is true when there are no errors.",
+			Long:  "Checks every concept against OKF v0.2: required frontmatter (type), recommended fields (title, description, tags), non-empty body, valid cross-links, the provenance/trust/lifecycle families (sources, generated, verified, status, stale_after), the Attested Computation contract (runtime, parameters, computation, executor, attester), reserved-file structure (index.md, log.md), and legacy v0.1 constructs (timestamp, # Citations). Every finding carries a stable rule ID (okf/<family>/<check>). With --format sarif, stdout is a SARIF 2.1.0 document for CI code scanning. Exits 1 if any errors are found, unless --exit-zero is set. JSON output: findings is the list (concept_id, rule, severity, message); errors and warnings are counts; valid is true when there are no errors. By default notes without frontmatter or type get a single warning and [[wikilinks]] are not checked, so a plain Obsidian vault validates; --strict answers whether the bundle is correct OKF.",
 			Flags: []schemaFlag{
+				{Name: "strict", Type: "bool", Default: "false", Description: "check as OKF only: notes without frontmatter or type are errors with the full field checks, and [[wikilinks]] are reported. By default such notes get one warning and wikilinks are not checked"},
 				{Name: "format", Type: "string", Default: "json", Description: "output format: json or sarif (SARIF 2.1.0)"},
 				{Name: "exit-zero", Type: "bool", Default: "false", Description: "always exit 0, even when errors are found (for CI steps that upload findings after the run)"},
 			},
@@ -800,6 +805,7 @@ func allSchemaCommands() []schemaCommand {
 			Short: "Check recommended fields and style (warnings only)",
 			Long:  "Same checks as validate but only emits warnings - errors are suppressed. Findings carry the same stable rule IDs, and --format sarif emits SARIF 2.1.0. Exits 0 even with warnings. JSON output: findings is the list; warnings is a count.",
 			Flags: []schemaFlag{
+				{Name: "strict", Type: "bool", Default: "false", Description: "check as OKF only: notes without frontmatter or type are errors with the full field checks, and [[wikilinks]] are reported. By default such notes get one warning and wikilinks are not checked"},
 				{Name: "format", Type: "string", Default: "json", Description: "output format: json or sarif (SARIF 2.1.0)"},
 			},
 			Args:      []schemaArg{{Name: "bundle", Required: true}},

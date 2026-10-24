@@ -32,6 +32,7 @@ var allRuleIDs = []string{
 	"okf/lifecycle/stale-after-invalid",
 	"okf/lifecycle/status-invalid",
 	"okf/links/broken",
+	"okf/links/wikilink",
 	"okf/reserved/index-frontmatter",
 	"okf/reserved/index-frontmatter-key",
 	"okf/reserved/log-date-heading",

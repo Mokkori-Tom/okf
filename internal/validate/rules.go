@@ -23,6 +23,7 @@ const (
 
 	// links: cross-link resolution (§6)
 	RuleLinkBroken = "okf/links/broken"
+	RuleWikilink   = "okf/links/wikilink"
 
 	// lifecycle: status and staleness (§5.4, §5.5)
 	RuleStatusInvalid     = "okf/lifecycle/status-invalid"
@@ -80,6 +81,7 @@ var ruleDescriptions = map[string]string{
 	RuleBundleUnreadable: "a file or directory in the bundle could not be read",
 
 	RuleLinkBroken: "cross-link does not resolve to a concept in the bundle; consumers must tolerate this (OKF §6.1, §11)",
+	RuleWikilink:   "[[wikilink]] is not an OKF link; reported only with --strict",
 
 	RuleStatusInvalid:     "'status' must be draft, stable, or deprecated (OKF §5.4)",
 	RuleStaleAfterInvalid: "'stale_after' must be an absolute YYYY-MM-DD date (OKF §5.5)",

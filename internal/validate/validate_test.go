@@ -185,7 +185,7 @@ func TestValidateLinks_RelativeLinkSuggestsAbsolutePath(t *testing.T) {
 	})
 
 	r := &Report{}
-	validateLinks(r, b)
+	validateLinks(r, b, false)
 
 	var msg string
 	for _, f := range r.Findings {
@@ -210,7 +210,7 @@ func TestValidateLinks_NonexistentConceptNoAbsolutePathSuggestion(t *testing.T) 
 	})
 
 	r := &Report{}
-	validateLinks(r, b)
+	validateLinks(r, b, false)
 
 	var msg string
 	for _, f := range r.Findings {
@@ -239,7 +239,7 @@ func TestValidateLinks_AlreadyAbsoluteBrokenNoSuggestion(t *testing.T) {
 	})
 
 	r := &Report{}
-	validateLinks(r, b)
+	validateLinks(r, b, false)
 
 	var msg string
 	for _, f := range r.Findings {
@@ -266,7 +266,7 @@ func TestValidateLinks_SuggestionPreservesFragment(t *testing.T) {
 	})
 
 	r := &Report{}
-	validateLinks(r, b)
+	validateLinks(r, b, false)
 
 	var msg string
 	for _, f := range r.Findings {
@@ -292,7 +292,7 @@ func TestValidateLinks_AbsoluteLinkToExistingIndexIsValid(t *testing.T) {
 	})
 
 	r := &Report{}
-	validateLinks(r, b)
+	validateLinks(r, b, false)
 
 	if len(r.Findings) != 0 {
 		t.Fatalf("expected no findings for a link to an existing index.md, got %+v", r.Findings)
@@ -308,7 +308,7 @@ func TestValidateLinks_RelativeLinkToExistingIndexIsValid(t *testing.T) {
 	})
 
 	r := &Report{}
-	validateLinks(r, b)
+	validateLinks(r, b, false)
 
 	if len(r.Findings) != 0 {
 		t.Fatalf("expected no findings for a relative link to an existing index.md, got %+v", r.Findings)
@@ -323,7 +323,7 @@ func TestValidateLinks_LinkToNonexistentIndexIsBrokenError(t *testing.T) {
 	})
 
 	r := &Report{}
-	validateLinks(r, b)
+	validateLinks(r, b, false)
 
 	var msg string
 	for _, f := range r.Findings {
@@ -349,7 +349,7 @@ func TestValidateLinks_LinkToExistingLogIsValid(t *testing.T) {
 	})
 
 	r := &Report{}
-	validateLinks(r, b)
+	validateLinks(r, b, false)
 
 	if len(r.Findings) != 0 {
 		t.Fatalf("expected no findings for a link to an existing log.md, got %+v", r.Findings)

@@ -73,3 +73,55 @@ func TestValidate_WikilinksAreNotChecked(t *testing.T) {
 		t.Errorf("findings = %+v", r.Findings)
 	}
 }
+
+func TestValidate_StrictChecksAsOKF(t *testing.T) {
+	dir := t.TempDir()
+	for name, content := range map[string]string{
+		"plain.md":    "# ただのメモ\n\n[[okf]]\n",
+		"obsidian.md": "---\ntitle: 作業メモ\nstatus: 進行中\n---\n\n本文\n",
+		"okf.md":      "---\ntype: Note\ntitle: OKF\ndescription: d\ntags: [x]\n---\n\n[[plain]] [[obsidian|別名]]\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	b, err := bundle.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	lenient := Validate(b)
+	if lenient.Errors != 0 {
+		t.Errorf("default: %d errors, want 0: %+v", lenient.Errors, lenient.Findings)
+	}
+
+	strict := ValidateWith(b, Options{Strict: true})
+	has := func(id, rule string, sev Severity) bool {
+		for _, f := range strict.Findings {
+			if f.ConceptID == id && f.RuleID == rule && f.Severity == sev {
+				return true
+			}
+		}
+		return false
+	}
+	for _, w := range []struct {
+		id, rule string
+		sev      Severity
+	}{
+		{"plain", RuleFrontmatterMissing, SeverityError},
+		{"obsidian", RuleTypeRequired, SeverityError},
+		{"obsidian", RuleStatusInvalid, SeverityError}, // full checks run
+		{"obsidian", RuleDescriptionRecommended, SeverityWarning},
+		{"okf", RuleWikilink, SeverityWarning},
+		{"plain", RuleWikilink, SeverityWarning},
+	} {
+		if !has(w.id, w.rule, w.sev) {
+			t.Errorf("strict lacks %s %s %v; findings: %+v", w.id, w.rule, w.sev, strict.Findings)
+		}
+	}
+	for _, f := range strict.Findings {
+		if f.RuleID == RuleWikilink && f.ConceptID == "okf" && !strings.HasPrefix(f.Message, "2 [[wikilinks]]") {
+			t.Errorf("wikilink message: %q", f.Message)
+		}
+	}
+}

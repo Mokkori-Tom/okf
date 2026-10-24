@@ -339,3 +339,18 @@ func TestLessEscape(t *testing.T) {
 		t.Errorf("got  %s\nwant %s", got, want)
 	}
 }
+
+func TestE2E_ValidateStrict(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "plain.md"), "# メモ\n")
+	if out, code := runOKFIn(t, dir, nil, "validate"); code != 0 || !strings.Contains(out, `"strict": false`) {
+		t.Errorf("default: exit %d; out=%s", code, out)
+	}
+	out, code := runOKFIn(t, dir, nil, "validate", "--strict")
+	if code != cerr.ExitCodeValidation || !strings.Contains(out, `"strict": true`) || !strings.Contains(out, `"rule": "okf/frontmatter/missing"`) {
+		t.Errorf("--strict: exit %d; out=%s", code, out)
+	}
+	if out, code := runOKFIn(t, dir, nil, "lint", "--strict"); code != 0 || strings.Contains(out, `"severity": "ERROR"`) {
+		t.Errorf("lint --strict: exit %d; out=%s", code, out)
+	}
+}

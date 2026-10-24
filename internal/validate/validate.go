@@ -51,16 +51,34 @@ func (r *Report) HasErrors() bool { return r.Errors > 0 }
 
 // Validate runs all checks against a bundle and returns a report.
 func Validate(b *bundle.Bundle) *Report {
+	return ValidateWith(b, Options{})
+}
+
+// Options select how strict validation is.
+type Options struct {
+	// Strict checks the bundle as OKF and nothing more lenient: a note
+	// without frontmatter or 'type' is an error with the full field checks,
+	// and [[wikilinks]] are reported. By default such notes get a single
+	// warning and wikilinks are not checked (see plainNote).
+	Strict bool
+}
+
+// ValidateWith runs all checks against a bundle with the given options.
+func ValidateWith(b *bundle.Bundle, o Options) *Report {
 	r := &Report{}
 	for _, c := range b.Concepts {
-		if plainNote(r, c) {
+		if o.Strict {
+			if strictFrontmatter(r, c) {
+				continue
+			}
+		} else if plainNote(r, c) {
 			continue
 		}
 		validateFrontmatter(r, c)
 		validateBody(r, c)
 		validateV02(r, b, c)
 	}
-	validateLinks(r, b)
+	validateLinks(r, b, o.Strict)
 	validateReserved(r, b)
 	// A bundle with nothing in it is almost always the wrong path (or a
 	// symlink that was not followed), so it must not pass silently.
@@ -94,12 +112,29 @@ func plainNote(r *Report, c *concept.Concept) bool {
 	return true
 }
 
+// strictFrontmatter reports a missing or unparseable frontmatter block as an
+// error and returns true when there are no fields left to check.
+func strictFrontmatter(r *Report, c *concept.Concept) bool {
+	switch err := c.FrontmatterErr; {
+	case errors.Is(err, concept.ErrNoFrontmatter):
+		r.add(c.ID, RuleFrontmatterMissing, SeverityError, "no YAML frontmatter: a concept needs at least 'type' (OKF §4.1)")
+	case err != nil:
+		r.add(c.ID, RuleFrontmatterInvalid, SeverityError, "frontmatter: "+err.Error())
+	default:
+		return false
+	}
+	return true
+}
+
 // validateFrontmatter checks required and recommended frontmatter fields.
 func validateFrontmatter(r *Report, c *concept.Concept) {
 	fm := c.Frontmatter
 
-	// type is REQUIRED (OKF spec §4.1); a concept without one is handled by
-	// plainNote before this runs.
+	// type is REQUIRED (OKF spec §4.1). Outside strict mode a concept without
+	// one never gets here (plainNote).
+	if strings.TrimSpace(fm.Type) == "" {
+		r.add(c.ID, RuleTypeRequired, SeverityError, "frontmatter: 'type' is required (OKF §4.1)")
+	}
 
 	// Recommended fields (OKF spec §4.1)
 	if fm.Title == "" {
@@ -142,8 +177,9 @@ func validateBody(r *Report, c *concept.Concept) {
 // relative link is broken but the same target would resolve as an absolute
 // path, the error message suggests the absolute form (e.g.
 // /organizations/cloaked) so authors can fix the link.
-func validateLinks(r *Report, b *bundle.Bundle) {
+func validateLinks(r *Report, b *bundle.Bundle, strict bool) {
 	for _, c := range b.Concepts {
+		var wiki []string
 		// Validate both body links and frontmatter links, mirroring how graph
 		// and backlinks consume them, so a frontmatter link to a nonexistent
 		// concept is reported instead of being silently dropped.
@@ -157,6 +193,9 @@ func validateLinks(r *Report, b *bundle.Bundle) {
 			// backlinks and graph, but not checked: a link to a page not
 			// written yet is ordinary in an Obsidian vault.
 			if link.Wiki {
+				if strict {
+					wiki = append(wiki, "[["+link.Target+"]]")
+				}
 				continue
 			}
 			target := ResolveIn(b, c.ID, link)
@@ -182,6 +221,14 @@ func validateLinks(r *Report, b *bundle.Bundle) {
 						link.Text, link.Target, target))
 				}
 			}
+		}
+		if len(wiki) > 0 {
+			shown := wiki
+			if len(shown) > 5 {
+				shown = append(shown[:5:5], "…")
+			}
+			r.add(c.ID, RuleWikilink, SeverityWarning, fmt.Sprintf(
+				"%d [[wikilinks]] are not OKF links; write [text](path.md) instead: %s", len(wiki), strings.Join(shown, " ")))
 		}
 	}
 }

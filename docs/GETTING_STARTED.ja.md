@@ -101,6 +101,10 @@ okf new -h                             # どのコマンドも -h / --help で�
 OKF の規格の外なので `okf validate` は検査しません(まだ書いていないページへのリンクは警告になりません)。
 名前だけのリンクは Obsidian と同じく vault のどこからでも探し、同じ名前が複数あれば同じフォルダ、次に短いパスを選びます。
 OKF に寄せたいノートから順に `type`(例: `Note`)と `title` を書き足していけば十分です。
+
+上の寛容さは、このフォークが足したものです。bundle が OKF として正しいかを確かめたいときは
+`okf validate --strict` を使います。frontmatter や `type` の無いノートはエラーになり、
+各項目の検査も行い、`[[wikilink]]` もページごとに警告として出します(`okf lint --strict` も同じ)。
 `status` は `draft`・`stable`・`deprecated` のどれかにします。
 独自の進み具合を残したいときは、`progress:` など別のキーに書きます(OKF は独自キーを許しています)。
 
