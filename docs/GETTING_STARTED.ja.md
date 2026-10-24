@@ -39,8 +39,12 @@ Tab でページ名・タグ・type・オプションを補完できるように
 zsh(oh-my-zsh や `compinit` の後)と bash に対応しています。
 
 ```bash
-source <(okf completion zsh)    # bash なら okf completion bash
+okf completion zsh >/dev/null 2>&1 && source <(okf completion zsh)
+# bash なら: okf completion bash >/dev/null 2>&1 && source <(okf completion bash)
 ```
+
+前半で補完に対応しているかを確かめるので、古い okf や、okf が入っていない環境では何もしません
+(`source <(okf completion bash)` だけだと、古い版のエラー出力を読み込んでシェルがエラーを出します)。
 
 `OKF_BUNDLE` が無いときは、今いるディレクトリが bundle になります。
 symlink の先にある bundle も、そのままの path で使えます。

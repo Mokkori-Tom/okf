@@ -68,7 +68,8 @@ func runComplete(args []string) {
 }
 
 const zshCompletion = `#compdef okf
-# okf completion for zsh. Load with:  source <(okf completion zsh)
+# okf completion for zsh. Load with:
+#   okf completion zsh >/dev/null 2>&1 && source <(okf completion zsh)
 
 _okf_lines() {
   local -a lines
@@ -143,7 +144,8 @@ _okf() {
 compdef _okf okf
 `
 
-const bashCompletion = `# okf completion for bash. Load with:  source <(okf completion bash)
+const bashCompletion = `# okf completion for bash. Load with:
+#   okf completion bash >/dev/null 2>&1 && source <(okf completion bash)
 
 _okf() {
   local cur prev cmd bundle=""
