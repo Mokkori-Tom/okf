@@ -177,3 +177,42 @@ func TestE2E_ShowByFilePath(t *testing.T) {
 		t.Errorf("show by id next to plain markdown: exit %d, want 0", code)
 	}
 }
+
+func TestE2E_CompletionCandidates(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "notes", "電力.md"), "---\ntype: Note\ntitle: A\ntags: [GPU, 冷却]\n---\n\nbody")
+	writeFile(t, filepath.Join(dir, "Branden Robinson.md"), "# 人物\n")
+	other := t.TempDir()
+
+	out, code := runOKFIn(t, other, []string{"OKF_BUNDLE=" + dir}, "__complete", "ids")
+	if code != 0 || out != "Branden Robinson\nnotes/電力\n" {
+		t.Errorf("ids: exit %d; out=%q", code, out)
+	}
+	out, _ = runOKFIn(t, other, nil, "__complete", "tags", dir)
+	if out != "GPU\n冷却\n" {
+		t.Errorf("tags with explicit bundle: %q", out)
+	}
+	// A missing bundle yields nothing, quietly.
+	if out, code := runOKFIn(t, other, []string{"OKF_BUNDLE=/nonexistent"}, "__complete", "ids"); code != 0 || out != "" {
+		t.Errorf("missing bundle: exit %d; out=%q", code, out)
+	}
+
+	for _, sh := range []string{"zsh", "bash"} {
+		script, code := runOKFIn(t, other, nil, "completion", sh)
+		if code != 0 || !strings.Contains(script, "okf __complete") {
+			t.Errorf("completion %s: exit %d", sh, code)
+			continue
+		}
+		if _, err := exec.LookPath(sh); err != nil {
+			continue
+		}
+		check := exec.Command(sh, "-n") //nolint:gosec // syntax check of our own script
+		check.Stdin = strings.NewReader(script)
+		if msg, err := check.CombinedOutput(); err != nil {
+			t.Errorf("%s -n: %v\n%s", sh, err, msg)
+		}
+	}
+	if _, code := runOKFIn(t, other, nil, "completion", "fish"); code != cerr.ExitCodeUsage {
+		t.Errorf("completion fish: exit %d, want usage error", code)
+	}
+}

@@ -35,6 +35,13 @@ bundle は、ノート(`.md`)を入れるディレクトリです。既にある
 export OKF_BUNDLE="$HOME/notes"
 ```
 
+Tab でページ名・タグ・type・オプションを補完できるように、補完スクリプトも読み込んでおきます。
+zsh(oh-my-zsh や `compinit` の後)と bash に対応しています。
+
+```bash
+source <(okf completion zsh)    # bash なら okf completion bash
+```
+
 `OKF_BUNDLE` が無いときは、今いるディレクトリが bundle になります。
 symlink の先にある bundle も、そのままの path で使えます。
 

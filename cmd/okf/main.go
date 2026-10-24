@@ -69,6 +69,10 @@ func main() {
 		runInit(rest)
 	case "new":
 		runNew(rest)
+	case "completion":
+		runCompletion(rest)
+	case "__complete":
+		runComplete(rest)
 	case "backlinks":
 		runBacklinks(rest)
 	default:
@@ -96,6 +100,7 @@ Commands:
   show <bundle> <concept-id> Show a single concept's full content
   search <bundle> [terms...]  Search concepts by text terms, --tag, --type
   new <bundle> <concept-id>   Create a concept page and open it in $EDITOR
+  completion zsh|bash         Print a shell completion script (page IDs, tags, types)
   backlinks <bundle> <id>    List concepts that link to a given concept
   graph <bundle>             Print cross-link graph statistics
   version                     Print version
@@ -872,6 +877,14 @@ func allSchemaCommands() []schemaCommand {
 			Args:      []schemaArg{{Name: "bundle", Required: true}},
 			Stdout:    "json",
 			ExitCodes: []int{cerr.ExitCodeOK, cerr.ExitCodeValidation, cerr.ExitCodeIO, cerr.ExitCodeUsage},
+		},
+		{
+			Name:      "completion",
+			Short:     "Print a shell completion script",
+			Long:      "Prints a zsh or bash completion script that completes commands, flags, page IDs (show, backlinks), folders (new), tags (--tag) and types (--type) from the bundle in $OKF_BUNDLE or the current directory. Load it with: source <(okf completion zsh).",
+			Args:      []schemaArg{{Name: "shell", Required: true}},
+			Stdout:    "text",
+			ExitCodes: []int{cerr.ExitCodeOK, cerr.ExitCodeUsage},
 		},
 		{
 			Name:      "version",
