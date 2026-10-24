@@ -108,7 +108,14 @@ OKF に寄せたいノートから順に `type`(例: `Note`)と `title` を書�
 `status` は `draft`・`stable`・`deprecated` のどれかにします。
 独自の進み具合を残したいときは、`progress:` など別のキーに書きます(OKF は独自キーを許しています)。
 
-## 5. 困ったとき
+## 5. PicoClaw から使う
+
+[picoclaw/AGENT.md](picoclaw/AGENT.md) を PicoClaw の `workspace/AGENT.md` に置き、`OKF_BUNDLE` を設定して起動します。
+PicoClaw の既定の文面に 3 行(okf を使うこと、使い方の調べ方、既存ノートを消さないこと)を足したものです。
+最後の行は外さないでください。これが無いと、`okf new` が「already exists」で止まったときに、
+モデルが既存のノートを `rm` で消して作り直すことがあります(Qwen3.6-35B-A3B で 3 回中 2 回、この行で 0 回)。
+
+## 6. 困ったとき
 
 - **何も見つからない / `validate` が `okf/bundle/empty` で失敗する**:bundle の path が違います。
   `okf list --human` で件数を確かめてください。
