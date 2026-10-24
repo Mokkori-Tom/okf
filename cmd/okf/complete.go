@@ -82,6 +82,7 @@ _okf() {
   cmds=(
     'search:search pages by text, --tag, --type'
     'show:show a page (rendered on a terminal)'
+    'edit:open a page in $EDITOR'
     'new:create a page and open it in $EDITOR'
     'list:list pages'
     'backlinks:list pages that link to a page'
@@ -124,10 +125,10 @@ _okf() {
   fi
 
   case $cmd in
-    show|backlinks)
+    show|edit|backlinks)
       local -a ids; ids=(${(f)"$(_okf_lines ids $bundle)"})
       _wanted pages expl 'page' compadd -a ids
-      [[ $cmd == show ]] && _files -g '*.md'
+      [[ $cmd != backlinks ]] && _files -g '*.md'
       ;;
     new)
       # Suggest existing folders inside the bundle as id prefixes.
@@ -155,7 +156,7 @@ _okf() {
   local IFS=$'\n'
 
   if (( COMP_CWORD == 1 )); then
-    COMPREPLY=($(compgen -W $'search\nshow\nnew\nlist\nbacklinks\nvalidate\nlint\nindex\ngraph\ninit\nschema\ncompletion\nversion' -- "$cur"))
+    COMPREPLY=($(compgen -W $'search\nshow\nedit\nnew\nlist\nbacklinks\nvalidate\nlint\nindex\ngraph\ninit\nschema\ncompletion\nversion' -- "$cur"))
     return
   fi
   if (( COMP_CWORD > 2 )) && [[ -d ${COMP_WORDS[2]} ]]; then
@@ -183,9 +184,9 @@ _okf() {
   fi
 
   case $cmd in
-    show|backlinks)
+    show|edit|backlinks)
       COMPREPLY=($(compgen -W "$(okf __complete ids $bundle 2>/dev/null)" -- "$cur"))
-      [[ $cmd == show ]] && COMPREPLY+=($(compgen -f -X '!*.md' -- "$cur"))
+      [[ $cmd != backlinks ]] && COMPREPLY+=($(compgen -f -X '!*.md' -- "$cur"))
       compopt -o filenames
       ;;
     completion) COMPREPLY=($(compgen -W $'zsh\nbash' -- "$cur")) ;;

@@ -65,6 +65,7 @@ okf search 電力 上限                   # 部分一致・AND(語を足すほ�
 okf search --tag 日記                  # タグで絞る(--type も使える)
 okf show gpu-fan                       # ID で読む
 okf show 日記/2026-10-22.md            # ファイルの path でも読める
+okf edit gpu-fan                       # エディタで開く(show の画面で v を押しても同じ)
 okf list                               # 一覧
 okf backlinks gpu-fan                  # このページへリンクしているページ
 okf validate                           # OKF の規格どおりかを検査
@@ -76,6 +77,7 @@ okf new -h                             # どのコマンドも -h / --help で�
   太字やリンクを描きます。折り返しは日本語の禁則に従います。
   長いページは `$OKF_PAGER`、次に `$PAGER`、無ければ `less` で開きます。
   書いたままの Markdown を見たいときは `--raw`、ページャーを使わないときは `--no-pager` を付けます。
+  ページャーが less のときは、`v` を押すと表示中のページをエディタで開けます。
 - 端末では人が読みやすい表示になり、パイプやエージェントからは JSON が出ます。
   `--human` / `--json`、または `OKF_OUTPUT=human|json` で切り替えを固定できます。
   `okf show x | less` のようにパイプへ流すと JSON になるので、人が読むときは `--human` を付けます。

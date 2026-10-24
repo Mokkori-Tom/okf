@@ -77,6 +77,8 @@ func main() {
 		runInit(rest)
 	case "new":
 		runNew(rest)
+	case "edit":
+		runEdit(rest)
 	case "completion":
 		runCompletion(rest)
 	case "__complete":
@@ -109,6 +111,7 @@ Commands:
   search <bundle> [terms...]  Search concepts by text terms, --tag, --type
   new <bundle> <concept-id>   Create a page: from flags and --body (- = stdin) in one call,
                               or open it in $EDITOR on a terminal (see okf new -h)
+  edit <bundle> <concept-id>  Open a page in $EDITOR (v in the show pager does the same)
   completion zsh|bash         Print a shell completion script (page IDs, tags, types)
   backlinks <bundle> <id>    List concepts that link to a given concept
   graph <bundle>             Print cross-link graph statistics
@@ -826,7 +829,7 @@ func allSchemaCommands() []schemaCommand {
 				{Name: "raw", Type: "bool", Default: "false", Description: "human output only: print the markdown body as written instead of rendering it"},
 				{Name: "no-pager", Type: "bool", Default: "false", Description: "human output only: do not page long output through $OKF_PAGER / $PAGER / less"},
 			},
-			Long: "Accepts a concept ID or a path to an existing .md file; a file path is read directly without loading the rest of the bundle, and a file without frontmatter is shown with empty frontmatter. Returns the concept's ID, file path, frontmatter (type, title, description, resource, tags), trust and lifecycle state (status, trust_tier, stale, generated, verified, stale_after), provenance (sources, usage_window), the Attested Computation contract when present (runtime, parameters, computation, executor, attester), and markdown body as JSON.",
+			Long: "On a terminal the page is rendered and long pages open in a pager; with less, press v to open the page's file in the editor. Accepts a concept ID or a path to an existing .md file; a file path is read directly without loading the rest of the bundle, and a file without frontmatter is shown with empty frontmatter. Returns the concept's ID, file path, frontmatter (type, title, description, resource, tags), trust and lifecycle state (status, trust_tier, stale, generated, verified, stale_after), provenance (sources, usage_window), the Attested Computation contract when present (runtime, parameters, computation, executor, attester), and markdown body as JSON.",
 			Args: []schemaArg{
 				{Name: "bundle", Required: true},
 				{Name: "concept-id", Required: true},
@@ -886,6 +889,17 @@ func allSchemaCommands() []schemaCommand {
 			Short:     "Print cross-link graph statistics",
 			Long:      "Builds the directed cross-link graph from concept markdown links and prints nodes, edges, and summary statistics.",
 			Args:      []schemaArg{{Name: "bundle", Required: true}},
+			Stdout:    "json",
+			ExitCodes: []int{cerr.ExitCodeOK, cerr.ExitCodeValidation, cerr.ExitCodeIO, cerr.ExitCodeUsage},
+		},
+		{
+			Name:  "edit",
+			Short: "Open a page in $EDITOR",
+			Long:  "Opens the page's file in $VISUAL, $EDITOR, or the first of nvim, vim, vi, nano. Accepts a concept ID or a path to an .md file. Without a terminal (agents, pipes) nothing is opened and the page's path is printed as JSON (opened: false). Inside okf show's pager (less), pressing v opens the shown page the same way.",
+			Args: []schemaArg{
+				{Name: "bundle", Required: false},
+				{Name: "concept-id", Required: true},
+			},
 			Stdout:    "json",
 			ExitCodes: []int{cerr.ExitCodeOK, cerr.ExitCodeValidation, cerr.ExitCodeIO, cerr.ExitCodeUsage},
 		},

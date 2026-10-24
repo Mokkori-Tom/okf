@@ -317,3 +317,25 @@ func TestE2E_NewMergesBodyFrontmatter(t *testing.T) {
 		t.Error("broken.md was written")
 	}
 }
+
+func TestE2E_EditWithoutTerminalPrintsPath(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "notes", "a b.md"), "---\ntype: Note\n---\n\nbody")
+	for _, args := range [][]string{{"edit", dir, "notes/a b"}, {"edit", filepath.Join(dir, "notes", "a b.md")}} {
+		out, code := runOKFIn(t, dir, nil, args...)
+		if code != 0 || !strings.Contains(out, `"opened": false`) || !strings.Contains(out, `a b.md"`) {
+			t.Errorf("%v: exit %d; out=%s", args, code, out)
+		}
+	}
+	if _, code := runOKFIn(t, dir, nil, "edit", dir, "nope"); code != cerr.ExitCodeValidation {
+		t.Errorf("edit missing page: exit %d", code)
+	}
+}
+
+func TestLessEscape(t *testing.T) {
+	got := lessEscape("nvim " + shQuote("/v/日記 x/a.b%c?d:e'f.md"))
+	want := `nvim '/v/日記 x/a\.b\%c\?d\:e'\\''f\.md'`
+	if got != want {
+		t.Errorf("got  %s\nwant %s", got, want)
+	}
+}

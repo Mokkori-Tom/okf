@@ -247,7 +247,7 @@ func printConcept(c *concept.Concept, root string, raw, noPager bool) {
 			b.WriteString("\n" + render.Markdown(body, o))
 		}
 	}
-	page(b.String(), noPager)
+	page(b.String(), noPager, c.Path)
 }
 
 // dropTitleHeading removes a leading "# title" line that repeats the title
@@ -279,7 +279,10 @@ func termWidth() int {
 // page writes out, through $OKF_PAGER or $PAGER (default less) when stdout
 // is a terminal. less gets LESS=FRX unless LESS is set, so short pages print
 // directly and colors survive. Falls back to plain output when no pager runs.
-func page(out string, noPager bool) {
+// With less and a source file, pressing v in the pager opens that file in the
+// editor: less reads the rendered page from a temporary file, and LESSEDIT
+// points its v command at the source instead.
+func page(out string, noPager bool, source string) {
 	if noPager || !isTerminal(os.Stdout) {
 		fmt.Print(out)
 		return
@@ -300,19 +303,52 @@ func page(out string, noPager bool) {
 		fmt.Print(out)
 		return
 	}
+	isLess := filepath.Base(name[0]) == "less"
+	env := os.Environ()
+	switch less := os.Getenv("LESS"); {
+	case less == "":
+		env = append(env, "LESS=FRX")
+	case isLess && !strings.ContainsAny(less, "Rr"):
+		env = append(env, "LESS="+less+" -R") // colors need -R
+	}
 	cmd := exec.Command("sh", "-c", pager) //nolint:gosec // the user's own pager setting
 	cmd.Stdin = strings.NewReader(out)
-	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-	cmd.Env = os.Environ()
-	if os.Getenv("LESS") == "" {
-		cmd.Env = append(cmd.Env, "LESS=FRX")
+	if editor := editorCommand(); isLess && source != "" && editor != "" {
+		if tmp, err := os.CreateTemp("", "okf-show-*.txt"); err == nil {
+			defer os.Remove(tmp.Name())
+			_, werr := tmp.WriteString(out)
+			if cerr := tmp.Close(); werr == nil && cerr == nil {
+				cmd = exec.Command("sh", "-c", pager+` "$1"`, "sh", tmp.Name()) //nolint:gosec // the user's own pager setting
+				cmd.Stdin = os.Stdin
+				env = append(env, "LESSEDIT="+lessEscape(editor+" "+shQuote(source)))
+			}
+		}
 	}
+	cmd.Stdout, cmd.Stderr, cmd.Env = os.Stdout, os.Stderr, env
 	if err := cmd.Run(); err != nil {
 		var ee *exec.ExitError
 		if !errors.As(err, &ee) {
 			fmt.Print(out)
 		}
 	}
+}
+
+// shQuote quotes s for sh.
+func shQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// lessEscape escapes the characters less treats specially in prompt strings
+// such as LESSEDIT, so a command is passed through literally.
+func lessEscape(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if strings.ContainsRune(`\%?:.`, r) {
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 func printFindings(findings []validate.Finding, errs, warns int, strict bool) {

@@ -240,24 +240,30 @@ func author() string {
 	return ""
 }
 
+// editorCommand is $VISUAL, else $EDITOR, else the first of nvim, vim, vi,
+// nano on PATH, or "" when there is none. It may carry arguments.
+func editorCommand() string {
+	if e := os.Getenv("VISUAL"); e != "" {
+		return e
+	}
+	if e := os.Getenv("EDITOR"); e != "" {
+		return e
+	}
+	for _, e := range []string{"nvim", "vim", "vi", "nano"} {
+		if _, err := exec.LookPath(e); err == nil {
+			return e
+		}
+	}
+	return ""
+}
+
 // openEditor opens file in $VISUAL or $EDITOR, falling back to the first of
 // nvim, vim, vi, nano on PATH. The editor variable may carry arguments
 // ("code -w"), so it runs through sh.
 func openEditor(file string) error {
-	editor := os.Getenv("VISUAL")
+	editor := editorCommand()
 	if editor == "" {
-		editor = os.Getenv("EDITOR")
-	}
-	if editor == "" {
-		for _, e := range []string{"nvim", "vim", "vi", "nano"} {
-			if _, err := exec.LookPath(e); err == nil {
-				editor = e
-				break
-			}
-		}
-	}
-	if editor == "" {
-		return fmt.Errorf("set $EDITOR to open new pages")
+		return fmt.Errorf("set $EDITOR to open pages")
 	}
 	cmd := exec.Command("sh", "-c", editor+` "$1"`, "sh", file) //nolint:gosec // the user's own editor setting
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
