@@ -15,7 +15,7 @@ type Filters struct {
 	Tag   string   // match if concept has this tag
 	Type  string   // match if concept frontmatter type equals this
 	Text  string   // match if text appears in title, description, or body (case-insensitive)
-	Terms []string // match if every term appears in title, description, or body
+	Terms []string // match if every term appears in title, description, or body; split on whitespace
 }
 
 // Search returns concepts matching all provided filters.
@@ -78,15 +78,17 @@ func Find(b *bundle.Bundle, f Filters) []Hit {
 	return hits
 }
 
-// terms returns the folded, non-empty text terms of the filter (Text plus
-// Terms), as used for matching.
+// terms returns the folded, non-empty text terms used for matching. Text is
+// one phrase, as upstream. Each entry of Terms is split on whitespace,
+// including the full-width space a Japanese IME types, so "ファン　電力"
+// passed as one argument still means two terms.
 func (f Filters) terms() []string {
-	raw := append([]string{f.Text}, f.Terms...)
 	var out []string
-	for _, t := range raw {
-		if t = strings.TrimSpace(Fold(t)); t != "" {
-			out = append(out, t)
-		}
+	if t := strings.TrimSpace(Fold(f.Text)); t != "" {
+		out = append(out, t)
+	}
+	for _, t := range f.Terms {
+		out = append(out, strings.Fields(Fold(t))...)
 	}
 	return out
 }

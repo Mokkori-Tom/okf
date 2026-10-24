@@ -68,3 +68,16 @@ func TestFind_NoTermsKeepsOrderAndNoLines(t *testing.T) {
 		t.Errorf("got %+v", hits)
 	}
 }
+
+func TestSearch_TermsSplitOnWhitespaceIncludingFullWidth(t *testing.T) {
+	b := testBundle(t, jaFiles)
+	for _, arg := range []string{"ファン 灯油", "ファン　灯油", " ファン\t灯油 "} {
+		if got := resultIDs(Search(b, Filters{Terms: []string{arg}})); len(got) != 1 || got[0] != "memo" {
+			t.Errorf("%q: got %v, want [memo]", arg, got)
+		}
+	}
+	// --text stays a phrase.
+	if got := Search(b, Filters{Text: "ファン 灯油"}); len(got) != 0 {
+		t.Errorf("--text phrase: got %d results, want 0", len(got))
+	}
+}

@@ -54,7 +54,9 @@ symlink の先にある bundle も、そのままの path で使えます。
 ```bash
 okf new 日記/2026-10-22 --tag 日記     # ページを作って $EDITOR で開く(上書きはしない)
 okf new gpu-fan --title "GPUのファン調整" --description "電力上限の記録"
-okf search 電力 上限                   # 部分一致・AND。ひらがな/カタカナ、全角/半角の英数字の違いを吸収
+okf search 電力 上限                   # 部分一致・AND(語を足すほど絞られる)。全角スペース区切りも可。
+                                       # ひらがな/カタカナ、全角/半角の英数字の違いを吸収。
+                                       # 空白を含む語句そのものを探すときは --text "語 句"
 okf search --tag 日記                  # タグで絞る(--type も使える)
 okf show gpu-fan                       # ID で読む
 okf show 日記/2026-10-22.md            # ファイルの path でも読める
