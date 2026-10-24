@@ -95,7 +95,8 @@ okf new -h                             # どのコマンドも -h / --help で�
 | 読めないファイル | 飛ばす(stderr に警告) | エラー(`okf/bundle/unreadable`) |
 
 タイトルが無いノートは、本文の最初の `# 見出し`、それも無ければファイル名で表示します。
-`[[ページ名]]` 形式のリンクも、`okf backlinks`・`okf graph`・`okf validate`(リンク切れの警告)で数えます。
+`[[ページ名]]` 形式のリンクも、`okf backlinks`・`okf graph` で数えます。
+OKF の規格の外なので `okf validate` は検査しません(まだ書いていないページへのリンクは警告になりません)。
 名前だけのリンクは Obsidian と同じく vault のどこからでも探し、同じ名前が複数あれば同じフォルダ、次に短いパスを選びます。
 OKF に寄せたいノートから順に `type`(例: `Note`)と `title` を書き足していけば十分です。
 `status` は `draft`・`stable`・`deprecated` のどれかにします。

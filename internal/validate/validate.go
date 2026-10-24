@@ -153,16 +153,15 @@ func validateLinks(r *Report, b *bundle.Bundle) {
 		links = append(links, bodyLinks...)
 		links = append(links, fmLinks...)
 		for _, link := range links {
+			// [[wikilinks]] are not part of OKF. They are followed for
+			// backlinks and graph, but not checked: a link to a page not
+			// written yet is ordinary in an Obsidian vault.
+			if link.Wiki {
+				continue
+			}
 			target := ResolveIn(b, c.ID, link)
 			if target == "" {
 				continue // external URL or non-concept link, skip
-			}
-			if link.Wiki {
-				if !b.HasConcept(target) && !b.HasReserved(target) {
-					r.add(c.ID, RuleLinkBroken, SeverityWarning, fmt.Sprintf(
-						"broken link: [[%s]] (no page named %s)", link.Target, target))
-				}
-				continue
 			}
 			if !b.HasConcept(target) && !b.HasReserved(target) {
 				// The link didn't resolve as written. Check whether the same

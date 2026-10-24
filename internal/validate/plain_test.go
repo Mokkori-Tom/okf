@@ -3,6 +3,7 @@ package validate
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/okfcli/okf/internal/bundle"
@@ -52,10 +53,10 @@ func TestValidate_PlainNotesAreWarningsTypedConceptsAreStrict(t *testing.T) {
 	}
 }
 
-func TestValidate_BrokenWikilinkIsAWarning(t *testing.T) {
+func TestValidate_WikilinksAreNotChecked(t *testing.T) {
 	dir := t.TempDir()
 	for name, content := range map[string]string{
-		"a.md": "---\ntype: Note\ntitle: A\ndescription: d\ntags: [x]\n---\n\n[[b]] [[missing]] ![[pic.png]]\n",
+		"a.md": "---\ntype: Note\ntitle: A\ndescription: d\ntags: [x]\n---\n\n[[b]] [[まだ無いページ]] ![[pic.png]] [md](missing.md)\n",
 		"b.md": "---\ntype: Note\ntitle: B\ndescription: d\ntags: [x]\n---\n\nbody\n",
 	} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
@@ -66,9 +67,9 @@ func TestValidate_BrokenWikilinkIsAWarning(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Only the OKF markdown link is checked.
 	r := Validate(b)
-	if len(r.Findings) != 1 || r.Findings[0].RuleID != RuleLinkBroken || r.Findings[0].Severity != SeverityWarning ||
-		r.Findings[0].Message != "broken link: [[missing]] (no page named missing)" {
+	if len(r.Findings) != 1 || r.Findings[0].RuleID != RuleLinkBroken || !strings.Contains(r.Findings[0].Message, "missing.md") {
 		t.Errorf("findings = %+v", r.Findings)
 	}
 }
