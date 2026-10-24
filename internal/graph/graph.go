@@ -55,7 +55,7 @@ func Build(b *bundle.Bundle) *Graph {
 		links = append(links, fmLinks...)
 		links = append(links, pathRefs...)
 		for _, link := range links {
-			target := resolveLink(c.ID, link)
+			target := validate.ResolveIn(b, c.ID, link)
 			if target != "" && !b.HasConcept(target) {
 				// Bare root-relative fallback: contract paths in the wild (and
 				// in the spec's §10.2 example) omit the leading slash. The

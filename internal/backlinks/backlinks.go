@@ -24,7 +24,7 @@ func Backlinks(b *bundle.Bundle, conceptID string) []string {
 		bodyLinks := validate.ExtractLinks(c.Body)
 		fmLinks := validate.ExtractFrontmatterLinks(c.Frontmatter.Links)
 		for _, link := range append(bodyLinks, fmLinks...) {
-			target := validate.ResolveLink(c.ID, link)
+			target := validate.ResolveIn(b, c.ID, link)
 			if target == conceptID {
 				if !seen[c.ID] {
 					seen[c.ID] = true

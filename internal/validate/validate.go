@@ -147,15 +147,22 @@ func validateLinks(r *Report, b *bundle.Bundle) {
 		// Validate both body links and frontmatter links, mirroring how graph
 		// and backlinks consume them, so a frontmatter link to a nonexistent
 		// concept is reported instead of being silently dropped.
-		bodyLinks := extractLinks(c.Body)
+		bodyLinks := ExtractLinks(c.Body)
 		fmLinks := ExtractFrontmatterLinks(c.Frontmatter.Links)
 		links := make([]Link, 0, len(bodyLinks)+len(fmLinks))
 		links = append(links, bodyLinks...)
 		links = append(links, fmLinks...)
 		for _, link := range links {
-			target := resolveLink(c.ID, link)
+			target := ResolveIn(b, c.ID, link)
 			if target == "" {
 				continue // external URL or non-concept link, skip
+			}
+			if link.Wiki {
+				if !b.HasConcept(target) && !b.HasReserved(target) {
+					r.add(c.ID, RuleLinkBroken, SeverityWarning, fmt.Sprintf(
+						"broken link: [[%s]] (no page named %s)", link.Target, target))
+				}
+				continue
 			}
 			if !b.HasConcept(target) && !b.HasReserved(target) {
 				// The link didn't resolve as written. Check whether the same
@@ -196,6 +203,7 @@ func fragmentOf(raw string) string {
 type Link struct {
 	Text   string
 	Target string
+	Wiki   bool // an Obsidian-style [[target]] link; resolve with ResolveIn
 }
 
 // ExtractLinks parses all markdown links [text](target) from a body.
@@ -209,8 +217,11 @@ type Link struct {
 // organizations/cloaked. External URLs (http://, https://, mailto:, and
 // pure-fragment links like #section) are returned as links but are ignored
 // by concept resolution.
+//
+// Obsidian-style [[wikilinks]] outside code are included with Wiki set; they
+// resolve by page name and need ResolveIn.
 func ExtractLinks(body string) []Link {
-	return extractLinks(body)
+	return append(extractLinks(body), extractWikiLinks(body)...)
 }
 
 // ExtractFrontmatterLinks converts a frontmatter "links:" list (concept IDs or

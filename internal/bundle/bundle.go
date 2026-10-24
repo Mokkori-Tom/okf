@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -19,7 +20,8 @@ type Bundle struct {
 	conceptByID  map[string]*concept.Concept
 	Reserved     []*concept.Concept // index.md / log.md files (parsed if present)
 	reservedByID map[string]*concept.Concept
-	Unreadable   []LoadError // files and directories skipped because they could not be read
+	Unreadable   []LoadError         // files and directories skipped because they could not be read
+	byName       map[string][]string // lower-cased last ID segment -> IDs, built on first FindByName
 }
 
 // LoadError records a file or directory that could not be read. The rest of
@@ -120,6 +122,28 @@ func Load(root string) (*Bundle, error) {
 // Get returns a concept by ID, or nil if not found.
 func (b *Bundle) Get(id string) *concept.Concept {
 	return b.conceptByID[id]
+}
+
+// FindByName returns, sorted, the IDs of concepts named name: the ID equals
+// name or ends in "/"+name, compared case-insensitively. name may carry
+// folders ("b/c" matches "a/b/c"). Wikilinks resolve through this.
+func (b *Bundle) FindByName(name string) []string {
+	if b.byName == nil {
+		b.byName = make(map[string][]string, len(b.Concepts))
+		for _, c := range b.Concepts {
+			k := strings.ToLower(path.Base(c.ID))
+			b.byName[k] = append(b.byName[k], c.ID)
+		}
+	}
+	lname := strings.ToLower(name)
+	var out []string
+	for _, id := range b.byName[strings.ToLower(path.Base(name))] {
+		if lid := strings.ToLower(id); lid == lname || strings.HasSuffix(lid, "/"+lname) {
+			out = append(out, id)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // HasConcept reports whether a concept with the given ID exists.

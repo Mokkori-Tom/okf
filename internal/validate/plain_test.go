@@ -51,3 +51,24 @@ func TestValidate_PlainNotesAreWarningsTypedConceptsAreStrict(t *testing.T) {
 		t.Errorf("errors = %d, want 1 (only the typed concept)", r.Errors)
 	}
 }
+
+func TestValidate_BrokenWikilinkIsAWarning(t *testing.T) {
+	dir := t.TempDir()
+	for name, content := range map[string]string{
+		"a.md": "---\ntype: Note\ntitle: A\ndescription: d\ntags: [x]\n---\n\n[[b]] [[missing]] ![[pic.png]]\n",
+		"b.md": "---\ntype: Note\ntitle: B\ndescription: d\ntags: [x]\n---\n\nbody\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	b, err := bundle.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := Validate(b)
+	if len(r.Findings) != 1 || r.Findings[0].RuleID != RuleLinkBroken || r.Findings[0].Severity != SeverityWarning ||
+		r.Findings[0].Message != "broken link: [[missing]] (no page named missing)" {
+		t.Errorf("findings = %+v", r.Findings)
+	}
+}
