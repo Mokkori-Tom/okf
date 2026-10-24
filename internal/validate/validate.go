@@ -4,6 +4,7 @@ package validate
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -318,17 +319,19 @@ func extractLinks(body string) []Link {
 	return links
 }
 
-// isExternalURL reports whether a link target is an external URL (http://, https://, etc.)
+// isExternalURL reports whether a link target points outside the bundle: a
+// pure fragment (#section), or any URI with a scheme (http:, mailto:, data:,
+// file:, obsidian:, tel:, ...). OKF links between pages are only paths,
+// absolute (/a.md) or relative (a.md), so anything with a scheme is not a
+// page link. Schemes are at least two characters, so a Windows drive letter
+// (C:\notes\a.md) still counts as a path.
 func isExternalURL(target string) bool {
 	target = strings.TrimSpace(target)
-	return strings.HasPrefix(target, "http://") ||
-		strings.HasPrefix(target, "https://") ||
-		strings.HasPrefix(target, "mailto:") ||
-		// data: URIs embed their content (inline images), so they point at
-		// nothing in the bundle.
-		len(target) >= 5 && strings.EqualFold(target[:5], "data:") ||
-		strings.HasPrefix(target, "#")
+	return strings.HasPrefix(target, "#") || uriScheme.MatchString(target)
 }
+
+// uriScheme matches a URI scheme (RFC 3986 §3.1) of two or more characters.
+var uriScheme = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]+:`)
 
 // ResolveLink converts a link target to a concept ID, or returns "" if the
 // link is external or otherwise not a concept reference.

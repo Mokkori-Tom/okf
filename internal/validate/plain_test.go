@@ -144,3 +144,29 @@ func TestValidate_DataURIsAreNotCheckedOrFollowed(t *testing.T) {
 		t.Errorf("data: resolved to %q, want \"\"", got)
 	}
 }
+
+func TestIsExternalURL_AnySchemeOfTwoOrMoreCharacters(t *testing.T) {
+	for target, want := range map[string]bool{
+		"https://x":               true,
+		"mailto:a@b":              true,
+		"data:image/png;base64,x": true,
+		"DATA:text/plain,x":       true,
+		"file:///home/a.md":       true,
+		"telnet://host":           true,
+		"obsidian://open?vault=v": true,
+		"ftp://h/f":               true,
+		"tel:+81":                 true,
+		"x-my.app+v2:thing":       true,
+		"#section":                true,
+		"a.md":                    false,
+		"/notes/a.md":             false,
+		"../a.md":                 false,
+		`C:\notes\a.md`:           false, // drive letter, not a scheme
+		"C:/notes/a.md":           false,
+		"1abc:x":                  false, // a scheme starts with a letter
+	} {
+		if got := isExternalURL(target); got != want {
+			t.Errorf("isExternalURL(%q) = %v, want %v", target, got, want)
+		}
+	}
+}
