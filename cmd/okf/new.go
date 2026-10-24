@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path"
@@ -22,6 +23,7 @@ type newFront struct {
 	Title       string     `yaml:"title"`
 	Description string     `yaml:"description"`
 	Tags        []string   `yaml:"tags"`
+	Status      string     `yaml:"status,omitempty"`
 	Generated   *generated `yaml:"generated,omitempty"`
 }
 
@@ -36,6 +38,7 @@ func runNew(args []string) {
 	var pos []string
 	front := newFront{Type: defaultNewType, Tags: []string{}}
 	noEdit := false
+	body, hasBody := "", false
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		value := func() string {
@@ -58,6 +61,17 @@ func runNew(args []string) {
 					front.Tags = append(front.Tags, t)
 				}
 			}
+		case "--status":
+			front.Status = value()
+		case "--body":
+			body, hasBody = value(), true
+			if body == "-" {
+				raw, err := io.ReadAll(os.Stdin)
+				if err != nil {
+					exitErr(cerr.IO(err, "read body from stdin"))
+				}
+				body = string(raw)
+			}
 		case "--no-edit":
 			noEdit = true
 		default:
@@ -75,7 +89,7 @@ func runNew(args []string) {
 	case 2:
 		root, id = pos[0], pos[1]
 	default:
-		exitErr(cerr.Usage("usage: okf new [bundle] <concept-id> [--title <title>] [--type <type>] [--tag <a,b>] [--description <text>] [--no-edit]"))
+		exitErr(cerr.Usage("usage: okf new [bundle] <concept-id> [--title <title>] [--type <type>] [--tag <a,b>] [--description <text>] [--status <status>] [--body <text>|-] [--no-edit]"))
 	}
 
 	id = strings.TrimSuffix(filepath.ToSlash(id), ".md")
@@ -105,6 +119,10 @@ func runNew(args []string) {
 		exitErr(cerr.Internal(err, "marshal frontmatter"))
 	}
 	content := "---\n" + fm.String() + "---\n\n# " + front.Title + "\n\n"
+	if hasBody {
+		// The body is written as given; a trailing newline is ensured.
+		content = "---\n" + fm.String() + "---\n\n" + strings.TrimRight(body, "\n") + "\n"
+	}
 
 	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
 		exitErr(cerr.IO(err, "create directory for %s", file))
@@ -139,7 +157,7 @@ func runNew(args []string) {
 	}
 	fmt.Println("created " + displayPath(abs))
 
-	if noEdit || !isTerminal(os.Stdin) || !isTerminal(os.Stdout) {
+	if noEdit || hasBody || !isTerminal(os.Stdin) || !isTerminal(os.Stdout) {
 		return
 	}
 	if err := openEditor(abs); err != nil {

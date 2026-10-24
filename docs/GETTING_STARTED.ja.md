@@ -29,7 +29,8 @@ CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -o okf-android-arm64 ./cmd/okf
 ## 2. ノートの置き場所(bundle)を決める
 
 bundle は、ノート(`.md`)を入れるディレクトリです。既にある Obsidian の vault をそのまま使えます。
-シェルの設定(`~/.zshrc` や `~/.bashrc`)に書いておくと、どこからでも bundle を省略できます。
+シェルの設定に書いておくと、どこからでも bundle を省略できます。
+zsh なら `~/.zshrc` ではなく `~/.zshenv` に書きます。エージェントやスクリプトが使う非対話のシェルにも届くためです(bash は `~/.bashrc`)。
 
 ```bash
 export OKF_BUNDLE="$HOME/notes"
@@ -54,6 +55,8 @@ symlink の先にある bundle も、そのままの path で使えます。
 ```bash
 okf new 日記/2026-10-22 --tag 日記     # ページを作って $EDITOR で開く(上書きはしない)
 okf new gpu-fan --title "GPUのファン調整" --description "電力上限の記録"
+okf new 物理/Kapitsa --type Person --title カピッツァ --tag 物理 --body - < 本文.md
+                                       # 本文ごと1回で作る(--body "文字列" も可。エディタは開かない)
 okf search 電力 上限                   # 部分一致・AND(語を足すほど絞られる)。全角スペース区切りも可。
                                        # ひらがな/カタカナ、全角/半角の英数字の違いを吸収。
                                        # 空白を含む語句そのものを探すときは --text "語 句"
@@ -63,6 +66,7 @@ okf show 日記/2026-10-22.md            # ファイルの path でも読める
 okf list                               # 一覧
 okf backlinks gpu-fan                  # このページへリンクしているページ
 okf validate                           # OKF の規格どおりかを検査
+okf new -h                             # どのコマンドも -h / --help でヘルプ(okf help new も同じ)
 ```
 
 - 端末での `okf show` は、ページを整形して表示します。見出しの `#` は消し、箇条書き・チェックボックス・

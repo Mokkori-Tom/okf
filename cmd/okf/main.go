@@ -43,11 +43,19 @@ func main() {
 
 	cmd := args[0]
 	rest := args[1:]
+	if cmd != "help" && wantsHelp(rest) {
+		printCommandHelp(cmd)
+		return
+	}
 
 	switch cmd {
 	case "version", "--version", "-v":
 		outputJSON(map[string]any{"name": "okf", "version": version, "commit": commit, "date": date})
 	case "help", "--help", "-h":
+		if len(rest) > 0 {
+			printCommandHelp(rest[0])
+			return
+		}
 		printUsage()
 	case "schema":
 		runSchema(rest)
@@ -774,7 +782,7 @@ func allSchemaCommands() []schemaCommand {
 		{
 			Name:  "validate",
 			Short: "Validate a bundle against the OKF spec",
-			Long:  "Checks every concept against OKF v0.2: required frontmatter (type), recommended fields (title, description, tags), non-empty body, valid cross-links, the provenance/trust/lifecycle families (sources, generated, verified, status, stale_after), the Attested Computation contract (runtime, parameters, computation, executor, attester), reserved-file structure (index.md, log.md), and legacy v0.1 constructs (timestamp, # Citations). Every finding carries a stable rule ID (okf/<family>/<check>). With --format sarif, stdout is a SARIF 2.1.0 document for CI code scanning. Exits 1 if any errors are found, unless --exit-zero is set.",
+			Long:  "Checks every concept against OKF v0.2: required frontmatter (type), recommended fields (title, description, tags), non-empty body, valid cross-links, the provenance/trust/lifecycle families (sources, generated, verified, status, stale_after), the Attested Computation contract (runtime, parameters, computation, executor, attester), reserved-file structure (index.md, log.md), and legacy v0.1 constructs (timestamp, # Citations). Every finding carries a stable rule ID (okf/<family>/<check>). With --format sarif, stdout is a SARIF 2.1.0 document for CI code scanning. Exits 1 if any errors are found, unless --exit-zero is set. JSON output: findings is the list (concept_id, rule, severity, message); errors and warnings are counts; valid is true when there are no errors.",
 			Flags: []schemaFlag{
 				{Name: "format", Type: "string", Default: "json", Description: "output format: json or sarif (SARIF 2.1.0)"},
 				{Name: "exit-zero", Type: "bool", Default: "false", Description: "always exit 0, even when errors are found (for CI steps that upload findings after the run)"},
@@ -786,7 +794,7 @@ func allSchemaCommands() []schemaCommand {
 		{
 			Name:  "lint",
 			Short: "Check recommended fields and style (warnings only)",
-			Long:  "Same checks as validate but only emits warnings - errors are suppressed. Findings carry the same stable rule IDs, and --format sarif emits SARIF 2.1.0. Exits 0 even with warnings.",
+			Long:  "Same checks as validate but only emits warnings - errors are suppressed. Findings carry the same stable rule IDs, and --format sarif emits SARIF 2.1.0. Exits 0 even with warnings. JSON output: findings is the list; warnings is a count.",
 			Flags: []schemaFlag{
 				{Name: "format", Type: "string", Default: "json", Description: "output format: json or sarif (SARIF 2.1.0)"},
 			},
@@ -844,12 +852,14 @@ func allSchemaCommands() []schemaCommand {
 		{
 			Name:  "new",
 			Short: "Create a new concept page",
-			Long:  "Writes <bundle>/<concept-id>.md with OKF frontmatter (type, title, empty description and tags, generated.by/at from $OKF_AUTHOR or human:$USER) and a title heading. Never overwrites: an existing file is a validation error. On a terminal the page is then opened in $VISUAL/$EDITOR unless --no-edit is given; otherwise it prints JSON with the new path. With one positional argument the bundle is $OKF_BUNDLE or the current directory.",
+			Long:  "Writes <bundle>/<concept-id>.md with OKF frontmatter (type, title, description and tags, empty unless given, optional status, generated.by/at from $OKF_AUTHOR or human:$USER) and either a title heading or, with --body, the given markdown. One call creates a finished page: okf new notes/x --type Note --title X --description ... --tag a,b --body - < body.md. Never overwrites: an existing file is a validation error. On a terminal the page is then opened in $VISUAL/$EDITOR unless --no-edit is given; otherwise it prints JSON with the new path. With one positional argument the bundle is $OKF_BUNDLE or the current directory.",
 			Flags: []schemaFlag{
 				{Name: "title", Type: "string", Default: "<last segment of concept-id>", Description: "concept title"},
 				{Name: "type", Type: "string", Default: defaultNewType, Description: "frontmatter type"},
 				{Name: "tag", Type: "string", Default: "", Description: "comma-separated tags; may be repeated"},
 				{Name: "description", Type: "string", Default: "", Description: "one-line description"},
+				{Name: "status", Type: "string", Default: "", Description: "lifecycle status: draft, stable, or deprecated"},
+				{Name: "body", Type: "string", Default: "", Description: "page body as markdown, written as given (no title heading is added); - reads it from stdin. Implies --no-edit"},
 				{Name: "no-edit", Type: "bool", Default: "false", Description: "do not open an editor"},
 			},
 			Args: []schemaArg{

@@ -55,6 +55,9 @@ func wrap(spans []span, width int) [][]cell {
 			}
 			brk = -1
 		}
+		if c.r == ' ' && len(line) == 0 && len(lines) > 0 {
+			continue // a space at a break is dropped, not carried to the next line
+		}
 		line = append(line, c)
 		w += cw
 		if n := len(line); n >= 2 && canBreak(line[n-2].r, line[n-1].r) {

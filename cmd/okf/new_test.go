@@ -216,3 +216,65 @@ func TestE2E_CompletionCandidates(t *testing.T) {
 		t.Errorf("completion fish: exit %d, want usage error", code)
 	}
 }
+
+func TestE2E_NewWithBodyInOneCall(t *testing.T) {
+	dir := t.TempDir()
+	cmd := exec.Command(okfBin, "new", dir, "物理/Kapitsa", "--type", "Person", "--title", "カピッツァ",
+		"--description", "ソ連の物理学者", "--tag", "物理,人物", "--status", "draft", "--body", "-") //nolint:gosec // test binary
+	cmd.Stdin = strings.NewReader("# カピッツァ\n\n超流動を発見した。\n\n\n")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("new --body -: %v; out=%s", err, out)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "物理", "Kapitsa.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(raw)
+	for _, want := range []string{"type: Person\n", "title: カピッツァ\n", "description: ソ連の物理学者\n", "  - 人物\n", "status: draft\n"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("frontmatter lacks %q:\n%s", want, s)
+		}
+	}
+	// Body as given (one title heading, not two), with a single trailing newline.
+	if !strings.HasSuffix(s, "---\n\n# カピッツァ\n\n超流動を発見した。\n") || strings.Count(s, "# カピッツァ") != 1 {
+		t.Errorf("body not written as given:\n%q", s)
+	}
+	if out, code := runOKFIn(t, dir, nil, "validate", "."); code != 0 || !strings.Contains(out, `"errors": 0`) {
+		t.Errorf("validate: exit %d; out=%s", code, out)
+	}
+
+	// --body with inline text.
+	if _, code := runOKFIn(t, dir, nil, "new", "short", "--body", "一行だけ"); code != 0 {
+		t.Fatalf("new --body text: exit %d", code)
+	}
+	if raw, _ := os.ReadFile(filepath.Join(dir, "short.md")); !strings.HasSuffix(string(raw), "---\n\n一行だけ\n") {
+		t.Errorf("inline body: %q", raw)
+	}
+}
+
+func TestE2E_SubcommandHelp(t *testing.T) {
+	dir := t.TempDir()
+	cases := []struct {
+		args []string
+		want string
+	}{
+		{[]string{"new", "-h"}, "okf new - "},
+		{[]string{"new", "x", "--help"}, "okf new - "},
+		{[]string{"search", "-h"}, "okf search - "},
+		{[]string{"help", "validate"}, "okf validate - "},
+	}
+	for _, c := range cases {
+		out, code := runOKFIn(t, dir, nil, c.args...)
+		if code != 0 || !strings.HasPrefix(out, c.want) || !strings.Contains(out, "Usage: okf ") {
+			t.Errorf("%v: exit %d; out=%q", c.args, code, out)
+		}
+	}
+	if out, _ := runOKFIn(t, dir, nil, "new", "-h"); !strings.Contains(out, "--body string") {
+		t.Errorf("new -h does not list --body: %s", out)
+	}
+	// -h never creates anything.
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+		t.Errorf("-h created files: %v", entries)
+	}
+}

@@ -114,3 +114,12 @@ func TestTooWideTableBecomesRecords(t *testing.T) {
 		t.Errorf("got  %q\nwant %q", got, want)
 	}
 }
+
+func TestBreakAtSpaceDropsTheSpace(t *testing.T) {
+	// At width 4 the space falls exactly on the break and must not lead
+	// the next line.
+	lines := wrap([]span{{"aaaa bbbb", ""}}, 4)
+	if len(lines) != 2 || paint(lines[0], false) != "aaaa" || paint(lines[1], false) != "bbbb" {
+		t.Errorf("lines = %q", lines)
+	}
+}
