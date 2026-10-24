@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/okfcli/okf/internal/cerr"
+	"github.com/okfcli/okf/internal/concept"
 )
 
 // newFront is the frontmatter `okf new` writes. Field order is the order a
@@ -37,6 +38,7 @@ const defaultNewType = "Note"
 func runNew(args []string) {
 	var pos []string
 	front := newFront{Type: defaultNewType, Tags: []string{}}
+	explicit := map[string]bool{} // frontmatter keys set by flags; they win over --body
 	noEdit := false
 	body, hasBody := "", false
 	for i := 0; i < len(args); i++ {
@@ -50,19 +52,20 @@ func runNew(args []string) {
 		}
 		switch a {
 		case "--title":
-			front.Title = value()
+			front.Title, explicit["title"] = value(), true
 		case "--type":
-			front.Type = value()
+			front.Type, explicit["type"] = value(), true
 		case "--description":
-			front.Description = value()
+			front.Description, explicit["description"] = value(), true
 		case "--tag":
+			explicit["tags"] = true
 			for _, t := range strings.Split(value(), ",") {
 				if t = strings.TrimSpace(t); t != "" {
 					front.Tags = append(front.Tags, t)
 				}
 			}
 		case "--status":
-			front.Status = value()
+			front.Status, explicit["status"] = value(), true
 		case "--body":
 			body, hasBody = value(), true
 			if body == "-" {
@@ -107,6 +110,33 @@ func runNew(args []string) {
 		front.Generated = &generated{By: by, At: time.Now().Format(time.RFC3339)}
 	}
 
+	// A frontmatter block at the top of --body is merged into the generated
+	// one, so pages can carry their own keys (created, sources, ...) in one
+	// call. Precedence: defaults < the body's frontmatter < explicit flags.
+	var extra *yaml.Node
+	if hasBody {
+		if fmText, rest, ok := concept.SplitFrontmatter(strings.TrimPrefix(body, "\uFEFF")); ok {
+			var doc yaml.Node
+			if err := yaml.Unmarshal([]byte(fmText), &doc); err != nil {
+				exitErr(cerr.Validation("frontmatter at the top of --body is not valid YAML: %v", err))
+			}
+			if len(doc.Content) > 0 {
+				if doc.Content[0].Kind != yaml.MappingNode {
+					exitErr(cerr.Validation("frontmatter at the top of --body must be a YAML mapping (key: value lines)"))
+				}
+				extra = doc.Content[0]
+			}
+			body = rest
+		}
+	}
+	fmNode, err := mergeFront(front, extra, explicit)
+	if err != nil {
+		exitErr(cerr.Internal(err, "build frontmatter"))
+	}
+	if err := fmNode.Decode(&front); err != nil {
+		exitErr(cerr.Validation("frontmatter at the top of --body: %v", err))
+	}
+
 	if info, err := os.Stat(root); err != nil || !info.IsDir() {
 		exitErr(cerr.IO(fmt.Errorf("not a directory"), "bundle %s", root))
 	}
@@ -115,7 +145,7 @@ func runNew(args []string) {
 	var fm strings.Builder
 	enc := yaml.NewEncoder(&fm)
 	enc.SetIndent(2)
-	if err := enc.Encode(front); err != nil {
+	if err := enc.Encode(fmNode); err != nil {
 		exitErr(cerr.Internal(err, "marshal frontmatter"))
 	}
 	content := "---\n" + fm.String() + "---\n\n# " + front.Title + "\n\n"
@@ -163,6 +193,36 @@ func runNew(args []string) {
 	if err := openEditor(abs); err != nil {
 		fmt.Fprintln(os.Stderr, "editor: "+err.Error())
 	}
+}
+
+// mergeFront encodes front as a YAML mapping and merges extra into it: keys
+// of extra replace the generated value unless a flag set that key, and new
+// keys are appended in their original order with their structure intact.
+func mergeFront(front newFront, extra *yaml.Node, explicit map[string]bool) (*yaml.Node, error) {
+	var node yaml.Node
+	if err := node.Encode(front); err != nil {
+		return nil, err
+	}
+	if extra == nil {
+		return &node, nil
+	}
+	for i := 0; i+1 < len(extra.Content); i += 2 {
+		k, v := extra.Content[i], extra.Content[i+1]
+		found := false
+		for j := 0; j+1 < len(node.Content); j += 2 {
+			if node.Content[j].Value == k.Value {
+				found = true
+				if !explicit[k.Value] {
+					node.Content[j+1] = v
+				}
+				break
+			}
+		}
+		if !found {
+			node.Content = append(node.Content, k, v)
+		}
+	}
+	return &node, nil
 }
 
 // author returns the actor recorded in generated.by (OKF §7): OKF_AUTHOR as

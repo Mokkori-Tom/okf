@@ -107,7 +107,8 @@ Commands:
   list <bundle>               List all concepts in the bundle
   show <bundle> <concept-id> Show a single concept's full content
   search <bundle> [terms...]  Search concepts by text terms, --tag, --type
-  new <bundle> <concept-id>   Create a concept page and open it in $EDITOR
+  new <bundle> <concept-id>   Create a page: from flags and --body (- = stdin) in one call,
+                              or open it in $EDITOR on a terminal (see okf new -h)
   completion zsh|bash         Print a shell completion script (page IDs, tags, types)
   backlinks <bundle> <id>    List concepts that link to a given concept
   graph <bundle>             Print cross-link graph statistics
@@ -859,7 +860,7 @@ func allSchemaCommands() []schemaCommand {
 				{Name: "tag", Type: "string", Default: "", Description: "comma-separated tags; may be repeated"},
 				{Name: "description", Type: "string", Default: "", Description: "one-line description"},
 				{Name: "status", Type: "string", Default: "", Description: "lifecycle status: draft, stable, or deprecated"},
-				{Name: "body", Type: "string", Default: "", Description: "page body as markdown, written as given (no title heading is added); - reads it from stdin. Implies --no-edit"},
+				{Name: "body", Type: "string", Default: "", Description: "page body as markdown, written as given (no title heading is added); - reads it from stdin. A frontmatter block at its top is merged into the page's frontmatter (flags win over it), so any extra keys can be set. Implies --no-edit"},
 				{Name: "no-edit", Type: "bool", Default: "false", Description: "do not open an editor"},
 			},
 			Args: []schemaArg{

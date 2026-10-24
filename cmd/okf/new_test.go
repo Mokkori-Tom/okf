@@ -278,3 +278,42 @@ func TestE2E_SubcommandHelp(t *testing.T) {
 		t.Errorf("-h created files: %v", entries)
 	}
 }
+
+func TestE2E_NewMergesBodyFrontmatter(t *testing.T) {
+	dir := t.TempDir()
+	body := "---\ntitle: 本文側のタイトル\ndescription: 本文側\nmachine: ogma\ncreated: 2026-10-24\nsources:\n  - resource: https://example.com/a\n    title: 資料 A\n---\n\n# 記録\n\n本文。\n"
+	cmd := exec.Command(okfBin, "new", dir, "log/今日", "--type", "Log", "--description", "フラグ側", "--body", "-") //nolint:gosec // test binary
+	cmd.Stdin = strings.NewReader(body)
+	if out, err := cmd.Output(); err != nil {
+		t.Fatalf("new: %v; out=%s", err, out)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "log", "今日.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(raw)
+	want := "---\ntype: Log\ntitle: 本文側のタイトル\ndescription: フラグ側\ntags: []\n"
+	if !strings.HasPrefix(s, want) {
+		t.Errorf("merged head:\n%s\nwant prefix:\n%s", s, want)
+	}
+	for _, w := range []string{"machine: ogma\n", "created: 2026-10-24\n", "sources:\n  - resource: https://example.com/a\n    title: 資料 A\n", "---\n\n# 記録\n\n本文。\n"} {
+		if !strings.Contains(s, w) {
+			t.Errorf("lacks %q:\n%s", w, s)
+		}
+	}
+	// Exactly one frontmatter block.
+	if strings.Count(s, "\n---\n") != 1 {
+		t.Errorf("more than one frontmatter block:\n%s", s)
+	}
+	if out, code := runOKFIn(t, dir, nil, "validate", "."); code != 0 || !strings.Contains(out, `"errors": 0`) {
+		t.Errorf("validate: exit %d; out=%s", code, out)
+	}
+
+	// Broken YAML at the top of --body is reported, and nothing is written.
+	if _, code := runOKFIn(t, dir, nil, "new", ".", "broken", "--body", "---\ntitle: [\n---\n本文"); code != cerr.ExitCodeValidation {
+		t.Errorf("broken body frontmatter: exit %d, want %d", code, cerr.ExitCodeValidation)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "broken.md")); err == nil {
+		t.Error("broken.md was written")
+	}
+}

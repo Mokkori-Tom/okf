@@ -128,6 +128,12 @@ func TestLoadBundle_MissingDirIsIOError(t *testing.T) {
 var okfBin string
 
 func TestMain(m *testing.M) {
+	// The developer's okf settings must never reach the tests: with
+	// OKF_BUNDLE set, a test that leaves the bundle out would write into
+	// the real bundle. Tests that need one set it explicitly.
+	for _, k := range []string{"OKF_BUNDLE", "OKF_OUTPUT", "OKF_AUTHOR", "OKF_PAGER", "VISUAL", "EDITOR", "PAGER", "COLUMNS", "NO_COLOR"} {
+		_ = os.Unsetenv(k)
+	}
 	dir, err := os.MkdirTemp("", "okf-test-bin")
 	if err != nil {
 		panic(err)

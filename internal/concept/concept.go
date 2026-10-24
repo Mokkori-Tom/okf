@@ -261,6 +261,14 @@ func conceptID(relPath string) string {
 	return id
 }
 
+// SplitFrontmatter separates a leading YAML frontmatter block from the rest of
+// a markdown document. ok is false when the document does not start with a
+// complete block.
+func SplitFrontmatter(doc string) (front, body string, ok bool) {
+	front, body, err := splitFrontmatter([]byte(doc))
+	return front, body, err == nil
+}
+
 // splitFrontmatter separates the YAML frontmatter block from the markdown body.
 // The frontmatter is delimited by --- on its own line at the start of the file
 // and a closing --- on its own line.

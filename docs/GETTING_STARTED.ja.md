@@ -57,6 +57,8 @@ okf new 日記/2026-10-22 --tag 日記     # ページを作って $EDITOR で�
 okf new gpu-fan --title "GPUのファン調整" --description "電力上限の記録"
 okf new 物理/Kapitsa --type Person --title カピッツァ --tag 物理 --body - < 本文.md
                                        # 本文ごと1回で作る(--body "文字列" も可。エディタは開かない)
+                                       # 本文の先頭に --- で囲んだ frontmatter を書くと、そのキー
+                                       # (created・sources など)も足される。同じキーはフラグが優先
 okf search 電力 上限                   # 部分一致・AND(語を足すほど絞られる)。全角スペース区切りも可。
                                        # ひらがな/カタカナ、全角/半角の英数字の違いを吸収。
                                        # 空白を含む語句そのものを探すときは --text "語 句"
