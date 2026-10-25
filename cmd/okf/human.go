@@ -51,9 +51,12 @@ func setOutputMode(args []string) []string {
 	return kept
 }
 
+// isTerminal reports whether f is a terminal. Being a character device is
+// not enough: /dev/null is one too, and an agent's shell often points stdin
+// or stdout there.
 func isTerminal(f *os.File) bool {
 	fi, err := f.Stat()
-	return err == nil && fi.Mode()&os.ModeCharDevice != 0
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0 && isTTY(f)
 }
 
 // --- styling ---

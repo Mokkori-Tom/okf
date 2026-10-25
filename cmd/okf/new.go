@@ -41,6 +41,7 @@ func runNew(args []string) {
 	explicit := map[string]bool{} // frontmatter keys set by flags; they win over --body
 	noEdit := false
 	body, hasBody := "", false
+	templateName := ""
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		value := func() string {
@@ -75,6 +76,8 @@ func runNew(args []string) {
 				}
 				body = string(raw)
 			}
+		case "--template":
+			templateName = value()
 		case "--no-edit":
 			noEdit = true
 		default:
@@ -110,32 +113,39 @@ func runNew(args []string) {
 		front.Generated = &generated{By: by, At: time.Now().Format(time.RFC3339)}
 	}
 
-	// A frontmatter block at the top of --body is merged into the generated
-	// one, so pages can carry their own keys (created, sources, ...) in one
-	// call. Precedence: defaults < the body's frontmatter < explicit flags.
-	var extra *yaml.Node
-	if hasBody {
-		if fmText, rest, ok := concept.SplitFrontmatter(strings.TrimPrefix(body, "\uFEFF")); ok {
-			var doc yaml.Node
-			if err := yaml.Unmarshal([]byte(fmText), &doc); err != nil {
-				exitErr(cerr.Validation("frontmatter at the top of --body is not valid YAML: %v", err))
-			}
-			if len(doc.Content) > 0 {
-				if doc.Content[0].Kind != yaml.MappingNode {
-					exitErr(cerr.Validation("frontmatter at the top of --body must be a YAML mapping (key: value lines)"))
-				}
-				extra = doc.Content[0]
-			}
-			body = rest
+	// A template and --body may each start with a frontmatter block; both
+	// are merged into the generated one, so pages carry their own keys
+	// (created, sources, ...) in one call. Precedence: defaults < template <
+	// --body < explicit flags. The page body is the template's, then --body.
+	var extras []*yaml.Node
+	var parts []string
+	if templateName != "" {
+		tpl := findTemplate(root, templateName)
+		if tpl == "" {
+			exitErr(cerr.Usage("template %q not found in %s", templateName, strings.Join(templateDirs(root), ", ")))
 		}
+		raw, err := os.ReadFile(tpl)
+		if err != nil {
+			exitErr(cerr.IO(err, "read template %s", tpl))
+		}
+		x, rest := splitFrontYAML(expandTemplate(string(raw), front.Title, time.Now()), "the template "+tpl)
+		extras, parts = append(extras, x), append(parts, rest)
 	}
-	fmNode, err := mergeFront(front, extra, explicit)
+	if hasBody {
+		x, rest := splitFrontYAML(body, "--body")
+		extras, parts = append(extras, x), append(parts, rest)
+	}
+	fmNode, err := mergeFront(front, extras, explicit)
 	if err != nil {
 		exitErr(cerr.Internal(err, "build frontmatter"))
 	}
 	if err := fmNode.Decode(&front); err != nil {
-		exitErr(cerr.Validation("frontmatter at the top of --body: %v", err))
+		exitErr(cerr.Validation("frontmatter of the template or --body: %v", err))
 	}
+	for i := range parts {
+		parts[i] = strings.Trim(parts[i], "\n")
+	}
+	body = strings.Join(parts, "\n\n")
 
 	if info, err := os.Stat(root); err != nil || !info.IsDir() {
 		exitErr(cerr.IO(fmt.Errorf("not a directory"), "bundle %s", root))
@@ -149,9 +159,9 @@ func runNew(args []string) {
 		exitErr(cerr.Internal(err, "marshal frontmatter"))
 	}
 	content := "---\n" + fm.String() + "---\n\n# " + front.Title + "\n\n"
-	if hasBody {
+	if templateName != "" || hasBody {
 		// The body is written as given; a trailing newline is ensured.
-		content = "---\n" + fm.String() + "---\n\n" + strings.TrimRight(body, "\n") + "\n"
+		content = "---\n" + fm.String() + "---\n\n" + body + "\n"
 	}
 
 	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
@@ -195,17 +205,44 @@ func runNew(args []string) {
 	}
 }
 
-// mergeFront encodes front as a YAML mapping and merges extra into it: keys
-// of extra replace the generated value unless a flag set that key, and new
-// keys are appended in their original order with their structure intact.
-func mergeFront(front newFront, extra *yaml.Node, explicit map[string]bool) (*yaml.Node, error) {
+// splitFrontYAML splits a leading frontmatter block off text and parses it
+// as a YAML mapping (nil when there is none). what names the source in errors.
+func splitFrontYAML(text, what string) (*yaml.Node, string) {
+	fmText, rest, ok := concept.SplitFrontmatter(strings.TrimPrefix(text, "\uFEFF"))
+	if !ok {
+		return nil, text
+	}
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(fmText), &doc); err != nil {
+		exitErr(cerr.Validation("frontmatter at the top of %s is not valid YAML: %v", what, err))
+	}
+	if len(doc.Content) == 0 {
+		return nil, rest
+	}
+	if doc.Content[0].Kind != yaml.MappingNode {
+		exitErr(cerr.Validation("frontmatter at the top of %s must be a YAML mapping (key: value lines)", what))
+	}
+	return doc.Content[0], rest
+}
+
+// mergeFront encodes front as a YAML mapping and merges each extra into it in
+// order: keys of an extra replace the current value unless a flag set that
+// key, and new keys are appended in their original order with their
+// structure intact.
+func mergeFront(front newFront, extras []*yaml.Node, explicit map[string]bool) (*yaml.Node, error) {
 	var node yaml.Node
 	if err := node.Encode(front); err != nil {
 		return nil, err
 	}
-	if extra == nil {
-		return &node, nil
+	for _, extra := range extras {
+		if extra != nil {
+			mergeInto(&node, extra, explicit)
+		}
 	}
+	return &node, nil
+}
+
+func mergeInto(node, extra *yaml.Node, explicit map[string]bool) {
 	for i := 0; i+1 < len(extra.Content); i += 2 {
 		k, v := extra.Content[i], extra.Content[i+1]
 		found := false
@@ -222,7 +259,6 @@ func mergeFront(front newFront, extra *yaml.Node, explicit map[string]bool) (*ya
 			node.Content = append(node.Content, k, v)
 		}
 	}
-	return &node, nil
 }
 
 // author returns the actor recorded in generated.by (OKF §7): OKF_AUTHOR as

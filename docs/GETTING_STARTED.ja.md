@@ -66,6 +66,7 @@ okf search --tag 日記                  # タグで絞る(--type も使える)
 okf show gpu-fan                       # ID で読む
 okf show 日記/2026-10-22.md            # ファイルの path でも読める
 okf edit gpu-fan                       # エディタで開く(show の画面で v を押しても同じ)
+okf new 2026-10-27 --template daily    # テンプレートから作る(下の「テンプレート」を参照)
 okf list                               # 一覧
 okf backlinks gpu-fan                  # このページへリンクしているページ
 okf validate                           # OKF の規格どおりかを検査
@@ -83,6 +84,25 @@ okf new -h                             # どのコマンドも -h / --help で�
   `okf show x | less` のようにパイプへ流すと JSON になるので、人が読むときは `--human` を付けます。
 - エディタは `$VISUAL`、次に `$EDITOR`、無ければ nvim・vim・vi・nano の順で探します。
 - `okf new` の作者は `$OKF_AUTHOR`、無ければ `human:$USER` が `generated.by` に入ります。
+
+### テンプレート
+
+`okf new <ページ> --template <名前>` で、テンプレートからページを作ります。
+テンプレートは `$OKF_TEMPLATES`、無ければ bundle の `Templates/`(無ければ `templates/`)に置いた `.md` です。
+名前の代わりにファイルの path も渡せます。`--template` の後ろは Tab で補完できます。
+
+テンプレートの中の次の書き方が置き換わります(Obsidian の「テンプレート」と同じ書き方に、日付のずらしを足したもの)。
+
+| 書き方 | 例(2026-10-26 06:08) |
+|---|---|
+| `{{title}}` | ページのタイトル |
+| `{{date}}` / `{{time}}` | `2026-10-26` / `06:08` |
+| `{{date:YYYY年M月D日 (ddd)}}` | `2026年10月26日 (Mon)` |
+| `{{date+1d:YYYY-MM-DD}}`・`{{date-1w}}` | 1日後・1週前(単位は d・w・M・y) |
+
+ページ名が `2026-10-27` のような日付なら、その日を基準にします(デイリーノートの前日・翌日リンクが合うように)。
+それ以外は今日が基準です。テンプレートの frontmatter も合流し、優先順はテンプレート < `--body` < フラグです。
+`--body` を一緒に渡すと、テンプレートの本文の後ろに足されます。
 
 ## 4. Obsidian の vault から移るとき
 

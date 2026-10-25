@@ -37,6 +37,12 @@ func runComplete(args []string) {
 	if len(args) > 1 && isDir(args[1]) {
 		root = args[1]
 	}
+	if args[0] == "templates" {
+		for _, n := range templateNames(root) {
+			fmt.Fprintln(os.Stdout, n)
+		}
+		return
+	}
 	b, err := bundle.Load(root)
 	if err != nil {
 		return
@@ -108,6 +114,7 @@ _okf() {
   case $prev in
     --tag)  compadd -- ${(f)"$(_okf_lines tags $bundle)"}; return ;;
     --type) compadd -- ${(f)"$(_okf_lines types $bundle)"}; return ;;
+    --template) compadd -- ${(f)"$(_okf_lines templates $bundle)"}; _files -g '*.md'; return ;;
     --title|--description|--text) return ;;
     --format) compadd -- json sarif; return ;;
   esac
@@ -116,7 +123,7 @@ _okf() {
     case $cmd in
       show)     compadd -- --raw --no-pager $common ;;
       search)   compadd -- --tag --type --text $common ;;
-      new)      compadd -- --title --type --tag --description --no-edit $common ;;
+      new)      compadd -- --title --type --tag --description --status --body --template --no-edit $common ;;
       validate) compadd -- --format --exit-zero $common ;;
       lint)     compadd -- --format $common ;;
       *)        compadd -- $common ;;
@@ -166,6 +173,7 @@ _okf() {
   case $prev in
     --tag)  COMPREPLY=($(compgen -W "$(okf __complete tags $bundle 2>/dev/null)" -- "$cur")); compopt -o filenames; return ;;
     --type) COMPREPLY=($(compgen -W "$(okf __complete types $bundle 2>/dev/null)" -- "$cur")); compopt -o filenames; return ;;
+    --template) COMPREPLY=($(compgen -W "$(okf __complete templates $bundle 2>/dev/null)" -- "$cur")); compopt -o filenames; return ;;
     --title|--description|--text) return ;;
     --format) COMPREPLY=($(compgen -W $'json\nsarif' -- "$cur")); return ;;
   esac
@@ -175,7 +183,7 @@ _okf() {
     case $cmd in
       show)     flags=$'--raw\n--no-pager' ;;
       search)   flags=$'--tag\n--type\n--text' ;;
-      new)      flags=$'--title\n--type\n--tag\n--description\n--no-edit' ;;
+      new)      flags=$'--title\n--type\n--tag\n--description\n--status\n--body\n--template\n--no-edit' ;;
       validate) flags=$'--format\n--exit-zero' ;;
       lint)     flags=$'--format' ;;
     esac

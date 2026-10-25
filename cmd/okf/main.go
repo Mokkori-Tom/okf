@@ -870,6 +870,7 @@ func allSchemaCommands() []schemaCommand {
 				{Name: "description", Type: "string", Default: "", Description: "one-line description"},
 				{Name: "status", Type: "string", Default: "", Description: "lifecycle status: draft, stable, or deprecated"},
 				{Name: "body", Type: "string", Default: "", Description: "page body as markdown, written as given (no title heading is added); - reads it from stdin. A frontmatter block at its top is merged into the page's frontmatter (flags win over it), so any extra keys can be set. Implies --no-edit"},
+				{Name: "template", Type: "string", Default: "", Description: "start from a template: a name looked up in $OKF_TEMPLATES, <bundle>/Templates or <bundle>/templates, or a path. Placeholders {{title}}, {{date}}, {{time}}, {{date:YYYY-MM-DD}}, {{date+1d:...}} (d, w, M, y) are filled in; dates are relative to the page's date when its title is YYYY-MM-DD, else to now. Its frontmatter is merged like --body's (template < --body < flags), and --body is appended after it"},
 				{Name: "no-edit", Type: "bool", Default: "false", Description: "do not open an editor"},
 			},
 			Args: []schemaArg{
