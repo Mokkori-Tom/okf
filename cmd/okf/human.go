@@ -318,7 +318,7 @@ func page(out string, noPager bool, source string) {
 	cmd.Stdin = strings.NewReader(out)
 	if editor := editorCommand(); isLess && source != "" && editor != "" {
 		if tmp, err := os.CreateTemp("", "okf-show-*.txt"); err == nil {
-			defer os.Remove(tmp.Name())
+			defer func() { _ = os.Remove(tmp.Name()) }()
 			_, werr := tmp.WriteString(out)
 			if cerr := tmp.Close(); werr == nil && cerr == nil {
 				cmd = exec.Command("sh", "-c", pager+` "$1"`, "sh", tmp.Name()) //nolint:gosec // the user's own pager setting

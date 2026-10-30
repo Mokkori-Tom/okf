@@ -633,12 +633,12 @@ func defaultBundle() string {
 
 // isMarkdownFile reports whether p names an existing regular .md file.
 func isMarkdownFile(p string) bool {
-	info, err := os.Stat(p)
+	info, err := os.Stat(p) //nolint:gosec // the user's own path argument
 	return err == nil && info.Mode().IsRegular() && strings.HasSuffix(strings.ToLower(p), ".md")
 }
 
 func isDir(p string) bool {
-	info, err := os.Stat(p)
+	info, err := os.Stat(p) //nolint:gosec // the user's own path argument
 	return err == nil && info.IsDir()
 }
 

@@ -147,7 +147,7 @@ func runNew(args []string) {
 	}
 	body = strings.Join(parts, "\n\n")
 
-	if info, err := os.Stat(root); err != nil || !info.IsDir() {
+	if info, err := os.Stat(root); err != nil || !info.IsDir() { //nolint:gosec // the user's own bundle path
 		exitErr(cerr.IO(fmt.Errorf("not a directory"), "bundle %s", root))
 	}
 	file := filepath.Join(root, filepath.FromSlash(id)+".md")
@@ -164,11 +164,11 @@ func runNew(args []string) {
 		content = "---\n" + fm.String() + "---\n\n" + body + "\n"
 	}
 
-	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil { //nolint:gosec // notes are shared like any document; umask applies
 		exitErr(cerr.IO(err, "create directory for %s", file))
 	}
 	// O_EXCL: never overwrite an existing page.
-	f, err := os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	f, err := os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644) //nolint:gosec // notes are shared like any document; umask applies
 	if err != nil {
 		if os.IsExist(err) {
 			exitErr(cerr.Validation("concept already exists: %s", file))
