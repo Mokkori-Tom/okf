@@ -4,6 +4,8 @@ package validate
 import (
 	"errors"
 	"fmt"
+	"net/url"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -203,7 +205,13 @@ func validateLinks(r *Report, b *bundle.Bundle, strict bool) {
 			if target == "" {
 				continue // external URL or non-concept link, skip
 			}
-			if !b.HasConcept(target) && !b.HasReserved(target) {
+			// A link to an image or other attachment (any extension but .md)
+			// targets a file, not a concept: it resolves if the file exists.
+			file := isFileLink(link)
+			exists := func(id string) bool {
+				return b.HasConcept(id) || b.HasReserved(id) || (file && b.HasFile(id))
+			}
+			if !exists(target) {
 				// The link didn't resolve as written. Check whether the same
 				// target would resolve as an absolute (bundle-root-relative)
 				// path; if so, the author likely intended an absolute link.
@@ -212,14 +220,18 @@ func validateLinks(r *Report, b *bundle.Bundle, strict bool) {
 				// for relative links (a leading-/ target resolves identically
 				// regardless of fromConceptID), so an already-absolute broken
 				// link correctly falls through to the plain message below.
-				if absTarget := resolveLink("", link); absTarget != "" && absTarget != target && (b.HasConcept(absTarget) || b.HasReserved(absTarget)) {
+				what := "concept"
+				if file {
+					what = "file"
+				}
+				if absTarget := resolveLink("", link); absTarget != "" && absTarget != target && exists(absTarget) {
 					r.add(c.ID, RuleLinkBroken, SeverityWarning, fmt.Sprintf(
 						"broken link: [%s] -> %s (relative links resolve from the current concept's directory; use /%s%s for an absolute path)",
 						link.Text, link.Target, absTarget, fragmentOf(link.Target)))
 				} else {
 					r.add(c.ID, RuleLinkBroken, SeverityWarning, fmt.Sprintf(
-						"broken link: [%s] -> %s (concept %s not found)",
-						link.Text, link.Target, target))
+						"broken link: [%s] -> %s (%s %s not found)",
+						link.Text, link.Target, what, target))
 				}
 			}
 		}
@@ -346,10 +358,7 @@ func resolveLink(fromConceptID string, link Link) string {
 	if target == "" || isExternalURL(target) {
 		return ""
 	}
-	// Strip any fragment (#section) or query (?query).
-	if idx := strings.IndexAny(target, "#?"); idx != -1 {
-		target = target[:idx]
-	}
+	target = linkPath(target)
 	if target == "" {
 		return ""
 	}
@@ -362,6 +371,41 @@ func resolveLink(fromConceptID string, link Link) string {
 	dir := dirOf(fromConceptID)
 	resolved := normalizePath(dir + "/" + target)
 	return concept.ConceptID(resolved)
+}
+
+// linkPath reduces a markdown link destination to the path it names: the
+// <...> brackets and a trailing "title" are removed, then the #fragment and
+// ?query, and %XX escapes are decoded, so ![x](<my pic.png> "t") and
+// ![x](my%20pic.png) both name "my pic.png".
+func linkPath(target string) string {
+	if strings.HasPrefix(target, "<") {
+		if end := strings.IndexByte(target, '>'); end != -1 {
+			target = target[1:end]
+		}
+	} else if i := strings.IndexAny(target, " \t"); i != -1 {
+		if t := strings.TrimSpace(target[i:]); t != "" && strings.ContainsRune(`"'(`, rune(t[0])) {
+			target = target[:i]
+		}
+	}
+	if idx := strings.IndexAny(target, "#?"); idx != -1 {
+		target = target[:idx]
+	}
+	if p, err := url.PathUnescape(target); err == nil {
+		target = p
+	}
+	return target
+}
+
+// isFileLink reports whether a markdown link points at a file that is not a
+// page, such as an image or a PDF: its path has an extension other than .md.
+// Such a link resolves to the file itself; see Bundle.HasFile.
+func isFileLink(link Link) bool {
+	t := strings.TrimSpace(link.Target)
+	if link.Wiki || t == "" || isExternalURL(t) {
+		return false
+	}
+	ext := strings.ToLower(path.Ext(linkPath(t)))
+	return ext != "" && ext != ".md"
 }
 
 // dirOf returns the directory portion of a concept ID ("tables/users" -> "tables").

@@ -376,3 +376,46 @@ func testBundle(t *testing.T, files map[string]string) *bundle.Bundle {
 	}
 	return b
 }
+
+// Links to images and other attachments resolve to files, not concepts: an
+// existing file is not a broken link, a missing one is reported as a file.
+func TestValidateLinks_FileLinks(t *testing.T) {
+	b := testBundle(t, map[string]string{
+		"assets/a.png":     "png",
+		"notes/b.png":      "png",
+		"notes/my pic.png": "png",
+		"docs/manual.pdf":  "pdf",
+		"notes/page.md": "---\ntype: T\ntitle: P\ndescription: d\ntags: [x]\n---\n\n" +
+			"![abs](/assets/a.png) ![rel](b.png) ![up](../assets/a.png#x)\n" +
+			"![title](b.png \"Title\") ![angle](<my pic.png>) ![pct](my%20pic.png)\n" +
+			"[pdf](/docs/manual.pdf) [missing](nope.png) [root](assets/a.png)\n",
+	})
+	r := Validate(b)
+	var got []string
+	for _, f := range r.Findings {
+		if f.RuleID == RuleLinkBroken {
+			got = append(got, f.Message)
+		}
+	}
+	want := []string{
+		"broken link: [missing] -> nope.png (file notes/nope.png not found)",
+		"broken link: [root] -> assets/a.png (relative links resolve from the current concept's directory; use /assets/a.png for an absolute path)",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("broken links:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+func TestResolveLink_TitleAndEscapes(t *testing.T) {
+	for target, want := range map[string]string{
+		`b.md "Title"`:   "dir/b",
+		`<my note.md>`:   "dir/my note",
+		`my%20note.md#h`: "dir/my note",
+		`/c.md 'T'`:      "c",
+		`../x/y.md (T)`:  "x/y",
+	} {
+		if got := ResolveLink("dir/a", Link{Target: target}); got != want {
+			t.Errorf("ResolveLink(%q) = %q, want %q", target, got, want)
+		}
+	}
+}

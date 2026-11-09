@@ -152,6 +152,17 @@ func (b *Bundle) HasConcept(id string) bool {
 	return ok
 }
 
+// HasFile reports whether a regular file exists at the bundle-relative slash
+// path rel, e.g. "assets/diagram.png". Links to images and other attachments
+// are checked through this, since they are not concepts.
+func (b *Bundle) HasFile(rel string) bool {
+	if rel == "" {
+		return false
+	}
+	info, err := os.Stat(filepath.Join(b.Root, filepath.FromSlash(rel)))
+	return err == nil && info.Mode().IsRegular()
+}
+
 // HasReserved reports whether a reserved file (index.md or log.md) with the
 // given ID exists, e.g. "sub/index" for /sub/index.md.
 func (b *Bundle) HasReserved(id string) bool {
