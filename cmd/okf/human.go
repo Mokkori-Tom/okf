@@ -176,7 +176,7 @@ func highlight(line string, terms []string, maxCells int) string {
 
 // --- renderers ---
 
-func printConcepts(concepts []*concept.Concept) {
+func printConcepts(concepts []*concept.Concept, total int) {
 	ids := make([]string, len(concepts))
 	for i, c := range concepts {
 		ids[i] = c.ID
@@ -189,12 +189,12 @@ func printConcepts(concepts []*concept.Concept) {
 		}
 		fmt.Printf("%s  %s %s\n", bold(pad(c.ID, w)), c.DisplayTitle(), dim("["+typ+"]"))
 	}
-	fmt.Fprintln(os.Stderr, dim(fmt.Sprintf("%d found", len(concepts))))
+	printFound(len(concepts), total)
 }
 
 const maxHumanLines = 3
 
-func printHits(hits []search.Hit, terms []string) {
+func printHits(hits []search.Hit, terms []string, total int) {
 	for i, h := range hits {
 		if i > 0 {
 			fmt.Println()
@@ -209,7 +209,7 @@ func printHits(hits []search.Hit, terms []string) {
 			fmt.Printf("  %s %s\n", dim(fmt.Sprintf("%4d:", l.Number)), highlight(strings.TrimSpace(l.Text), terms, 100))
 		}
 	}
-	fmt.Fprintln(os.Stderr, dim(fmt.Sprintf("%d found", len(hits))))
+	printFound(len(hits), total)
 }
 
 // printConcept shows one page. Unless raw, the body is rendered as markdown
@@ -383,4 +383,14 @@ func printIDs(ids []string) {
 		fmt.Println(id)
 	}
 	fmt.Fprintln(os.Stderr, dim(fmt.Sprintf("%d found", len(ids))))
+}
+
+// printFound reports on stderr how many results there were, and how many
+// --limit left out.
+func printFound(shown, total int) {
+	if shown < total {
+		fmt.Fprintln(os.Stderr, dim(fmt.Sprintf("%d found, first %d shown (--limit 0 shows all)", total, shown)))
+		return
+	}
+	fmt.Fprintln(os.Stderr, dim(fmt.Sprintf("%d found", total)))
 }

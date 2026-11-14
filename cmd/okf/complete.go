@@ -122,7 +122,8 @@ _okf() {
   if [[ $cur == -* ]]; then
     case $cmd in
       show)     compadd -- --raw --no-pager $common ;;
-      search)   compadd -- --tag --type --text $common ;;
+      search)   compadd -- --tag --type --text --limit $common ;;
+      list|graph) compadd -- --limit $common ;;
       new)      compadd -- --title --type --tag --description --status --body --template --no-edit $common ;;
       validate) compadd -- --format --exit-zero $common ;;
       lint)     compadd -- --format $common ;;
@@ -182,7 +183,8 @@ _okf() {
     local flags
     case $cmd in
       show)     flags=$'--raw\n--no-pager' ;;
-      search)   flags=$'--tag\n--type\n--text' ;;
+      search)   flags=$'--tag\n--type\n--text\n--limit' ;;
+      list|graph) flags=$'--limit' ;;
       new)      flags=$'--title\n--type\n--tag\n--description\n--status\n--body\n--template\n--no-edit' ;;
       validate) flags=$'--format\n--exit-zero' ;;
       lint)     flags=$'--format' ;;

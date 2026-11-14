@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -106,9 +107,9 @@ Commands:
   validate <bundle>           Validate a bundle against the OKF spec
   lint <bundle>               Check recommended fields and style (warnings only)
   index <bundle>              Generate index.md files (progressive disclosure)
-  list <bundle>               List all concepts in the bundle
+  list <bundle>               List concepts in the bundle (JSON: first 50, --limit N)
   show <bundle> <concept-id> Show a single concept's full content
-  search <bundle> [terms...]  Search concepts by text terms, --tag, --type
+  search <bundle> [terms...]  Search concepts by text terms, --tag, --type, --limit
   new <bundle> <concept-id>   Create a page: from flags and --body (- = stdin) in one call,
                               or open it in $EDITOR on a terminal (see okf new -h)
   edit <bundle> <concept-id>  Open a page in $EDITOR (v in the show pager does the same)
@@ -199,6 +200,47 @@ func mustBundle(cmd string, args []string) *bundle.Bundle {
 		exitErr(err)
 	}
 	return b
+}
+
+// defaultJSONLimit caps list, search and graph results in JSON output, so an
+// agent asking about a large bundle does not fill its context in one call.
+// Plain-text output for people is not capped unless --limit is given.
+const defaultJSONLimit = 50
+
+// takeLimit removes --limit N from args and returns the remaining args and
+// the limit in effect: N if given (0 means no limit), else defaultJSONLimit
+// for JSON output and no limit for plain text.
+func takeLimit(args []string) ([]string, int) {
+	limit := defaultJSONLimit
+	if humanOut {
+		limit = 0
+	}
+	rest := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		if args[i] != "--limit" {
+			rest = append(rest, args[i])
+			continue
+		}
+		if i+1 >= len(args) {
+			exitErr(cerr.Usage("--limit requires a value"))
+		}
+		n, err := strconv.Atoi(args[i+1])
+		if err != nil || n < 0 {
+			exitErr(cerr.Usage("--limit must be a number 0 or greater, got %q", args[i+1]))
+		}
+		limit = n
+		i++
+	}
+	return rest, limit
+}
+
+// capped returns the first limit items of s (all of them when limit is 0)
+// and whether any were left out.
+func capped[T any](s []T, limit int) ([]T, bool) {
+	if limit == 0 || len(s) <= limit {
+		return s, false
+	}
+	return s[:limit], true
 }
 
 // --- validate / lint ---
@@ -343,6 +385,7 @@ func runIndex(args []string) {
 // --- graph ---
 
 func runGraph(args []string) {
+	args, limit := takeLimit(args)
 	b := mustBundle("graph", args)
 	g := graph.Build(b)
 	s := g.Stats()
@@ -361,11 +404,15 @@ func runGraph(args []string) {
 		edges = append(edges, map[string]string{"from": e.From, "to": e.To})
 	}
 
+	nodes, nodesCut := capped(nodes, limit)
+	edges, edgesCut := capped(edges, limit)
+
 	outputJSON(map[string]any{
 		"command":       "graph",
 		"bundle":        b.Root,
 		"nodes":         nodes,
 		"edges":         edges,
+		"truncated":     nodesCut || edgesCut,
 		"node_count":    s.NodeCount,
 		"edge_count":    s.EdgeCount,
 		"isolated":      s.IsolatedNodes,
@@ -377,14 +424,16 @@ func runGraph(args []string) {
 // --- list ---
 
 func runList(args []string) {
+	args, limit := takeLimit(args)
 	b := mustBundle("list", args)
+	shown, truncated := capped(b.Concepts, limit)
 	if humanOut {
-		printConcepts(b.Concepts)
+		printConcepts(shown, len(b.Concepts))
 		return
 	}
 
-	concepts := make([]map[string]string, 0, len(b.Concepts))
-	for _, c := range b.Concepts {
+	concepts := make([]map[string]string, 0, len(shown))
+	for _, c := range shown {
 		concepts = append(concepts, map[string]string{
 			"id":         c.ID,
 			"type":       c.Frontmatter.Type,
@@ -395,10 +444,12 @@ func runList(args []string) {
 	}
 
 	outputJSON(map[string]any{
-		"command":  "list",
-		"bundle":   b.Root,
-		"concepts": concepts,
-		"count":    len(b.Concepts),
+		"command":   "list",
+		"bundle":    b.Root,
+		"concepts":  concepts,
+		"count":     len(b.Concepts),
+		"returned":  len(shown),
+		"truncated": truncated,
 	})
 }
 
@@ -544,6 +595,7 @@ func runShow(args []string) {
 // --- search ---
 
 func runSearch(args []string) {
+	args, limit := takeLimit(args)
 	f := search.Filters{}
 	var pos []string
 	for i := 0; i < len(args); i++ {
@@ -589,12 +641,13 @@ func runSearch(args []string) {
 	}
 
 	hits := search.Find(b, f)
+	shown, truncated := capped(hits, limit)
 	if humanOut {
-		printHits(hits, f.FoldedTerms())
+		printHits(shown, f.FoldedTerms(), len(hits))
 		return
 	}
-	concepts := make([]map[string]any, 0, len(hits))
-	for _, h := range hits {
+	concepts := make([]map[string]any, 0, len(shown))
+	for _, h := range shown {
 		r := map[string]any{
 			"id":    h.Concept.ID,
 			"type":  h.Concept.Frontmatter.Type,
@@ -612,11 +665,13 @@ func runSearch(args []string) {
 	}
 
 	outputJSON(map[string]any{
-		"command": "search",
-		"bundle":  b.Root,
-		"filters": f,
-		"results": concepts,
-		"count":   len(hits),
+		"command":   "search",
+		"bundle":    b.Root,
+		"filters":   f,
+		"results":   concepts,
+		"count":     len(hits),
+		"returned":  len(shown),
+		"truncated": truncated,
 	})
 }
 
@@ -823,7 +878,8 @@ func allSchemaCommands() []schemaCommand {
 		{
 			Name:      "list",
 			Short:     "List all concepts in the bundle",
-			Long:      "Lists every concept document with its ID, type, title, lifecycle status, and trust tier (unverified, machine-confirmed, or human-reviewed).",
+			Long:      "Lists concept documents with their ID, type, title, lifecycle status, and trust tier (unverified, machine-confirmed, or human-reviewed). JSON output is capped at 50 concepts unless --limit is given; count is the total and truncated tells whether some were left out, so narrow with okf search instead of raising the limit.",
+			Flags:     []schemaFlag{{Name: "limit", Type: "int", Default: "50 when JSON, none for plain text", Description: "return at most N results; 0 returns all. count is always the full total, and truncated is true when results were left out"}},
 			Args:      []schemaArg{{Name: "bundle", Required: true}},
 			Stdout:    "json",
 			ExitCodes: []int{cerr.ExitCodeOK, cerr.ExitCodeValidation, cerr.ExitCodeIO, cerr.ExitCodeUsage},
@@ -846,11 +902,12 @@ func allSchemaCommands() []schemaCommand {
 		{
 			Name:  "search",
 			Short: "Search concepts by tag, type, or text",
-			Long:  "Filters concepts in a bundle by tag (--tag), frontmatter type (--type), or full-text search in title, description, and body (positional terms and/or --text). Positional terms are split on whitespace (including the full-width space); --text is matched as one phrase. Text matching is substring-based, so it works for languages written without spaces such as Japanese; it ignores case, full-width/half-width ASCII, and katakana/hiragana. Multiple terms and filters are AND-combined. With text terms, results are ranked (title matches first, then by number of matching lines) and each carries up to 5 matching body lines with file line numbers (matches) and the total (match_count). The first positional argument is taken as the bundle when it is a directory or contains a slash; otherwise the bundle is $OKF_BUNDLE or the current directory. With no filters, returns all concepts.",
+			Long:  "Filters concepts in a bundle by tag (--tag), frontmatter type (--type), or full-text search in title, description, and body (positional terms and/or --text). Positional terms are split on whitespace (including the full-width space); --text is matched as one phrase. Text matching is substring-based, so it works for languages written without spaces such as Japanese; it ignores case, full-width/half-width ASCII, and katakana/hiragana. Multiple terms and filters are AND-combined. With text terms, results are ranked (title matches first, then by number of matching lines) and each carries up to 5 matching body lines with file line numbers (matches) and the total (match_count). The first positional argument is taken as the bundle when it is a directory or contains a slash; otherwise the bundle is $OKF_BUNDLE or the current directory. With no filters, returns all concepts. JSON output is capped at 50 results unless --limit is given; count is the total and truncated tells whether some were left out.",
 			Flags: []schemaFlag{
 				{Name: "tag", Type: "string", Default: "", Description: "filter by tag (case-insensitive)"},
 				{Name: "type", Type: "string", Default: "", Description: "filter by frontmatter type (case-insensitive)"},
 				{Name: "text", Type: "string", Default: "", Description: "full-text search in title, description, and body (case-insensitive)"},
+				{Name: "limit", Type: "int", Default: "50 when JSON, none for plain text", Description: "return at most N results; 0 returns all. count is always the full total, and truncated is true when results were left out"},
 			},
 			Args: []schemaArg{
 				{Name: "bundle", Required: false},
@@ -894,7 +951,8 @@ func allSchemaCommands() []schemaCommand {
 		{
 			Name:      "graph",
 			Short:     "Print cross-link graph statistics",
-			Long:      "Builds the directed cross-link graph from concept markdown links and prints nodes, edges, and summary statistics.",
+			Long:      "Builds the directed cross-link graph from concept markdown links and prints nodes, edges, and summary statistics. The statistics always cover the whole graph; the nodes and edges lists are each capped at 50 unless --limit is given, with truncated set when either was cut.",
+			Flags:     []schemaFlag{{Name: "limit", Type: "int", Default: "50 when JSON, none for plain text", Description: "return at most N nodes and N edges; 0 returns all. The counts and statistics are always for the whole graph"}},
 			Args:      []schemaArg{{Name: "bundle", Required: true}},
 			Stdout:    "json",
 			ExitCodes: []int{cerr.ExitCodeOK, cerr.ExitCodeValidation, cerr.ExitCodeIO, cerr.ExitCodeUsage},

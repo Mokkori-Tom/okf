@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -285,5 +286,61 @@ func TestE2E_IndexListsPlainMarkdown(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join(dir, "index.md"))
 	if err != nil || !strings.Contains(string(raw), "Demo project") {
 		t.Errorf("index.md does not list README by its heading: %q %v", raw, err)
+	}
+}
+
+// --- --limit keeps JSON output small for agents ---
+
+func TestE2E_LimitCapsJSONResults(t *testing.T) {
+	dir := t.TempDir()
+	for i := range 60 {
+		writeFile(t, filepath.Join(dir, "notes", "n"+strconv.Itoa(i)+".md"),
+			"---\ntype: Note\ntitle: n"+strconv.Itoa(i)+"\n---\nfoo [x](n0.md)\n")
+	}
+	type page struct {
+		Count     int  `json:"count"`
+		Returned  int  `json:"returned"`
+		Truncated bool `json:"truncated"`
+	}
+	check := func(want page, args ...string) {
+		t.Helper()
+		out, code := runOKF(t, args...)
+		if code != 0 {
+			t.Fatalf("%v: exit %d; out=%s", args, code, out)
+		}
+		var got page
+		if err := json.Unmarshal([]byte(out), &got); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		if got != want {
+			t.Errorf("%v = %+v, want %+v", args, got, want)
+		}
+	}
+	check(page{60, defaultJSONLimit, true}, "list", dir)
+	check(page{60, 60, false}, "list", dir, "--limit", "0")
+	check(page{60, 3, true}, "search", dir, "foo", "--limit", "3")
+	check(page{60, 60, false}, "search", "--limit", "100", dir, "foo")
+
+	out, _ := runOKF(t, "graph", dir, "--limit", "5")
+	var g struct {
+		NodeCount int              `json:"node_count"`
+		Nodes     []map[string]any `json:"nodes"`
+		Edges     []map[string]any `json:"edges"`
+		Truncated bool             `json:"truncated"`
+	}
+	if err := json.Unmarshal([]byte(out), &g); err != nil {
+		t.Fatal(err)
+	}
+	if g.NodeCount != 60 || len(g.Nodes) != 5 || len(g.Edges) != 5 || !g.Truncated {
+		t.Errorf("graph --limit 5: node_count=%d nodes=%d edges=%d truncated=%v", g.NodeCount, len(g.Nodes), len(g.Edges), g.Truncated)
+	}
+
+	for _, bad := range []string{"-1", "x"} {
+		if _, code := runOKF(t, "list", dir, "--limit", bad); code != cerr.ExitCodeUsage {
+			t.Errorf("--limit %s: exit %d, want usage", bad, code)
+		}
+	}
+	if _, code := runOKF(t, "list", dir, "--limit"); code != cerr.ExitCodeUsage {
+		t.Errorf("--limit without value: exit %d, want usage", code)
 	}
 }
