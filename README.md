@@ -17,6 +17,8 @@ A Go CLI toolkit for the [Open Knowledge Format (OKF)](https://github.com/Google
 > - **One bad file never hides the rest.** Unreadable files and broken frontmatter in `index.md`/`log.md` are skipped with a warning on stderr and reported by `validate` (`okf/bundle/unreadable`, `okf/frontmatter/invalid`). A bundle root that is a symlink is followed. `validate` fails on a bundle with no concepts (`okf/bundle/empty`), which is almost always a wrong path.
 > - **Shell completion.** `okf completion zsh >/dev/null 2>&1 && source <(okf completion zsh)` (or `bash`; the guard skips older okf builds that lack the command) completes commands, flags, page IDs for `show`/`backlinks`, folders for `new`, and values for `--tag`/`--type`, read live from the bundle.
 > - **Wikilinks count as links.** `[[page]]`, `[[page|alias]]`, `[[page#heading]]`, `[[folder/page]]` and `![[page]]` embeds are followed by `backlinks` and `graph`. They are not part of OKF, so `validate` does not check them: a link to a page not written yet is ordinary in a vault, and only OKF `[text](path.md)` links are reported as broken. They resolve like Obsidian: same folder, then the path from the root, then by page name anywhere (case-insensitive; same folder, then shortest path, wins). `[[/page]]` pins the root; links inside code and to attachments are ignored.
+> - **Results capped for agents.** `list`, `search` and `graph` return the first 50 results in JSON (`--limit N`, `0` for all); `count` stays the total and `truncated` says whether some were left out, so one call on a large bundle does not fill an agent's context. Plain-text output is not capped.
+> - **A Claude Code skill.** [docs/claude-code/okf/SKILL.md](docs/claude-code/okf/SKILL.md) tells Claude Code when to reach for `okf` and how. Install it with `ln -s "$PWD/docs/claude-code/okf" ~/.claude/skills/okf`.
 > - **Default bundle.** The bundle argument may be left out; `$OKF_BUNDLE` is used, else the current directory.
 >
 > Build from source (the module path is unchanged, so `go install` from the fork path does not work):
@@ -153,12 +155,12 @@ Progressive disclosure (index.md) lets the agent navigate level by level instead
 | `okf validate <bundle> [--format json\|sarif] [--exit-zero]` | Validate a bundle against the OKF spec (exit 1 on errors) |
 | `okf lint <bundle> [--format json\|sarif]` | Check recommended fields and style (warnings only) |
 | `okf index <bundle>` | Generate index.md files (progressive disclosure) |
-| `okf list <bundle>` | List all concepts with ID, type, title, status, trust tier |
+| `okf list <bundle> [--limit N]` | List concepts with ID, type, title, status, trust tier |
 | `okf show [bundle] <concept-id \| file.md>` | Show a single concept's full content |
-| `okf search [bundle] [terms...] [--tag] [--type] [--text]` | Search concepts by tag, type, or text |
+| `okf search [bundle] [terms...] [--tag] [--type] [--text] [--limit N]` | Search concepts by tag, type, or text |
 | `okf new [bundle] <concept-id> [--title] [--type] [--tag] [--no-edit]` | Create a concept page and open it in $EDITOR |
 | `okf backlinks <bundle> <concept-id>` | List concepts that link to a given concept |
-| `okf graph <bundle>` | Print cross-link graph with nodes, edges, and stats |
+| `okf graph <bundle> [--limit N]` | Print cross-link graph with nodes, edges, and stats |
 | `okf version` | Print version |
 
 ## Exit codes
